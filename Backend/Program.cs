@@ -11,6 +11,7 @@ using Infrastructure.Configurations;
 using Infrastructure.Repositories;
 using Infrastructure.Utilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 
@@ -64,6 +65,14 @@ namespace Backend
 
             //Register TokenService
             builder.Services.AddScoped<TokenService>();
+
+            builder.Services.Configure<AiServiceSettings>(builder.Configuration.GetSection("AiService"));
+            builder.Services.AddHttpClient<AiService>((serviceProvider, client) =>
+            {
+                var options = serviceProvider.GetRequiredService<IOptions<AiServiceSettings>>().Value;
+                client.BaseAddress = new Uri(options.BaseUrl);
+                client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+            });
 
 
             // Bind and register JwtSettings

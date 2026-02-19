@@ -27,6 +27,11 @@ Built using **.NET 8** and **ASP.NET Core Web APIs**.
 - ✅ Student enrollment system
 - ✅ Protected API endpoints
 - ✅ Token refresh flow using HttpOnly cookies
+- ✅ AI integration gateway endpoints (`/api/ai/*`) for chat, summary, and quiz (Stage 1)
+
+## 🤖 AI Integration Docs
+
+- See `docs/AI_INTEGRATION_GUIDE.md` for architecture, setup, contracts, tests, and staged roadmap.
 
 ---
 
@@ -77,3 +82,4 @@ This project is licensed under the MIT License.
 
 ---
 
+```
