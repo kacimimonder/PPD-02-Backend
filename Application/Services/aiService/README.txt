@@ -1,0 +1,1 @@
+create your own .env file and put your gemini api key in it
