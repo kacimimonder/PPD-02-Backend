@@ -1,4 +1,4 @@
-﻿using Application.DTOs.Course;
+using Application.DTOs.Course;
 using Application.DTOs.Enrollment;
 using Application.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -30,15 +30,20 @@ namespace API.Controllers
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> AddEnrollmentAsync([FromBody] EnrollmentCreateDTO enrollmentCreateDTO)
         {
-            int studentId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-            if (enrollmentCreateDTO == null || enrollmentCreateDTO?.CourseId == null
-                || enrollmentCreateDTO.CourseId <= 0)
+            var nameId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(nameId))
             {
-                return BadRequest("Enrollment data is null.");
+                return StatusCode(StatusCodes.Status401Unauthorized, "Token missing or invalid.");
+            }
+            int studentId = int.Parse(nameId);
+            if (enrollmentCreateDTO == null || enrollmentCreateDTO.CourseId <= 0)
+            {
+                return BadRequest("Enrollment data is null or invalid courseId.");
             }
             try
             {
                 await _enrollmentService.AddEnrollmentAsync(enrollmentCreateDTO.CourseId, studentId);
+                Console.WriteLine($"[Enrollment] Added: StudentId={studentId}, CourseId={enrollmentCreateDTO.CourseId}");
                 return Ok("Enrollment added successfully.");
             }
             catch (Exception ex)
