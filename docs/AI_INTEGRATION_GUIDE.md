@@ -85,6 +85,16 @@ The backend reads AI service URL from:
 
 - `Backend/appsettings.json` -> `AiService:BaseUrl`
 
+### 4.3 Preflight required for auth tests
+
+Before testing authenticated AI endpoints, ensure:
+
+1. SQL Server is running and reachable.
+2. `Backend/appsettings.json` has a valid `ConnectionStrings:DefaultConnection`.
+3. Database schema is applied from `MinCourseraSQLScript.sql`.
+
+If SQL is not connected, login/user creation fails and authenticated tests cannot run.
+
 ---
 
 ## 5) API contracts
@@ -133,6 +143,68 @@ The backend reads AI service URL from:
 ---
 
 ## 7) Stage roadmap (for graded project)
+
+## Stage B status (implemented)
+
+### What was built
+
+- Added module-aware AI orchestration service:
+  - `Application/Services/AiModuleService.cs`
+- Added module request DTOs:
+  - `Application/DTOs/AI/AiModuleSummaryRequestDto.cs`
+  - `Application/DTOs/AI/AiModuleQuizRequestDto.cs`
+- Extended repository contract and implementation to load module context:
+  - `Domain/Interfaces/ICourseModuleRepository.cs`
+  - `Infrastructure/Repositories/CourseModuleRepository.cs`
+- Added backend endpoints:
+  - `POST /api/ai/modules/{moduleId}/summary`
+  - `POST /api/ai/modules/{moduleId}/quiz`
+  - in `Backend/Controllers/AIController.cs`
+
+### How it works (plain language)
+
+1. Backend receives moduleId and user token.
+2. Backend reads user id + role from JWT claims.
+3. Backend loads module with contents from DB.
+4. Authorization rules:
+   - Student must be enrolled in the module's course.
+   - Instructor must own the module's course.
+5. Backend builds text context from module title/description/content.
+6. Backend calls AI microservice for summary/quiz generation.
+
+### Stage B tests executed
+
+- Build verification:
+  - `dotnet build Backend.sln` (success)
+- Service health:
+  - `GET /api/ai/health` -> `{"status":"ok"}`
+- Security checks on new endpoints:
+  - `POST /api/ai/modules/1/summary` without token -> `401`
+  - `POST /api/ai/modules/1/quiz` without token -> `401`
+
+### Stage B authenticated happy-path (completed)
+
+Executed full real flow:
+
+1. Created instructor user.
+2. Logged in and obtained JWT.
+3. Created course (after ensuring `Language` and `Subject` lookup rows exist).
+4. Created course module and module content.
+5. Called AI module endpoints with JWT.
+
+Observed results:
+
+- `CREATE_RESP=User created successfully`
+- `LOGIN_USER_ID=4`
+- `COURSE_ID=2`
+- `MODULE_ID=1`
+- `MODULE_CONTENT_RESP=1`
+- `SUMMARY_PROVIDER=fake`
+- `QUIZ_PROVIDER=fake`
+
+Conclusion: Stage B is fully validated end-to-end.
+
+---
 
 ## Stage 2 (recommended next)
 

@@ -48,6 +48,14 @@ namespace Infrastructure.Repositories
             return await _miniCourseraContext.CourseModules.FindAsync(id);
         }
 
+        public async Task<CourseModule?> GetByIdWithContentsAsync(int courseModuleId)
+        {
+            return await _miniCourseraContext.CourseModules
+                .Include(module => module.ModuleContents)
+                .Include(module => module.Course)
+                .FirstOrDefaultAsync(module => module.Id == courseModuleId);
+        }
+
         public async Task UpdateAsync(CourseModule entity)
         {
             var existingModule = await _miniCourseraContext.CourseModules.FindAsync(entity.Id);

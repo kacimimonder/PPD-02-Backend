@@ -12,15 +12,26 @@ namespace Infrastructure.Utilities
 {
     public class CloudinaryVideoService:IVideoService
     {
-        private readonly Cloudinary _cloudinary;
+        private readonly Cloudinary? _cloudinary;
+        private readonly bool _useCloudinary;
         public CloudinaryVideoService(IConfiguration config)
         {
             var cloudName = config["Cloudinary:CloudName"];
             var apiKey = config["Cloudinary:ApiKey"];
             var apiSecret = config["Cloudinary:ApiSecret"];
 
-            Account account = new Account(cloudName, apiKey, apiSecret);
-            _cloudinary = new Cloudinary(account);
+            if (!string.IsNullOrWhiteSpace(cloudName)
+                && !string.IsNullOrWhiteSpace(apiKey)
+                && !string.IsNullOrWhiteSpace(apiSecret))
+            {
+                Account account = new Account(cloudName, apiKey, apiSecret);
+                _cloudinary = new Cloudinary(account);
+                _useCloudinary = true;
+            }
+            else
+            {
+                _useCloudinary = false;
+            }
         }
 
         private string ExtractPublicIdFromUrl(string videoUrl)
@@ -35,6 +46,11 @@ namespace Infrastructure.Utilities
 
         public async Task<string> UploadVideoAsync(Stream fileStream, string fileName)
         {
+            if (!_useCloudinary)
+            {
+                return $"/videos/{Guid.NewGuid()}_{fileName}";
+            }
+
             var uniqueFileName = $"{Guid.NewGuid()}_{fileName}";
 
             var uploadParams = new VideoUploadParams()
@@ -56,6 +72,10 @@ namespace Infrastructure.Utilities
         public async Task<bool> DeleteVideoAsync(string? url)
         {
             if (url == null || url == "") return false;
+            if (!_useCloudinary)
+            {
+                return true;
+            }
             string publicId = ExtractPublicIdFromUrl(url);
             var deletionParams = new DeletionParams(publicId)
             {
@@ -76,6 +96,11 @@ namespace Infrastructure.Utilities
             try
             {
                 if (string.IsNullOrEmpty(videoUrl)) return null;
+
+                if (!_useCloudinary)
+                {
+                    return videoUrl;
+                }
 
                 string publicId = ExtractPublicIdFromUrl(videoUrl);
 

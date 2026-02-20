@@ -10,5 +10,6 @@ namespace Domain.Interfaces
     public interface ICourseModuleRepository:IBaseRepository<CourseModule>
     {
         Task<bool> IsCourseModuleCreatedByInstructor(int instructorId, int courseModuleId);
+        Task<CourseModule?> GetByIdWithContentsAsync(int courseModuleId);
     }
 }

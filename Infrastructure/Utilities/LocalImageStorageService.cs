@@ -10,7 +10,9 @@ namespace Infrastructure.Utilities
 {
     public class LocalImageStorageService : IImageStorageService
     {
-        private readonly Cloudinary _cloudinary;
+        private readonly Cloudinary? _cloudinary;
+        private readonly bool _useCloudinary;
+        private readonly string? _localUploadRoot;
 
         public LocalImageStorageService(IConfiguration config)
         {
@@ -18,8 +20,20 @@ namespace Infrastructure.Utilities
             var apiKey = config["Cloudinary:ApiKey"];
             var apiSecret = config["Cloudinary:ApiSecret"];
 
-            Account account = new Account(cloudName, apiKey, apiSecret);
-            _cloudinary = new Cloudinary(account);
+            if (!string.IsNullOrWhiteSpace(cloudName)
+                && !string.IsNullOrWhiteSpace(apiKey)
+                && !string.IsNullOrWhiteSpace(apiSecret))
+            {
+                Account account = new Account(cloudName, apiKey, apiSecret);
+                _cloudinary = new Cloudinary(account);
+                _useCloudinary = true;
+            }
+            else
+            {
+                _useCloudinary = false;
+                _localUploadRoot = Path.Combine(AppContext.BaseDirectory, "uploads");
+                Directory.CreateDirectory(_localUploadRoot);
+            }
         }
 
         public async Task<string> SaveImageAsync(Stream imageStream)
@@ -28,6 +42,15 @@ namespace Infrastructure.Utilities
             {
                 if (imageStream == null || imageStream.Length == 0)
                     return null;
+
+                if (!_useCloudinary)
+                {
+                    var localFileName = $"{Guid.NewGuid()}.jpg";
+                    var fullPath = Path.Combine(_localUploadRoot!, localFileName);
+                    using var fileStream = new FileStream(fullPath, FileMode.Create, FileAccess.Write);
+                    await imageStream.CopyToAsync(fileStream);
+                    return $"/uploads/{localFileName}";
+                }
 
                 var uniqueFileName = $"{Guid.NewGuid()}.jpg"; // Optional: detect format
                 var uploadParams = new ImageUploadParams()
@@ -50,6 +73,15 @@ namespace Infrastructure.Utilities
             {
                 if (string.IsNullOrWhiteSpace(imageUrl)) return false;
 
+                if (!_useCloudinary)
+                {
+                    var fileName = imageUrl.Replace("/uploads/", string.Empty).Trim();
+                    var fullPath = Path.Combine(_localUploadRoot!, fileName);
+                    if (!File.Exists(fullPath)) return false;
+                    File.Delete(fullPath);
+                    return true;
+                }
+
                 var publicId = ExtractPublicIdFromUrl(imageUrl);
 
                 var deletionParams = new DeletionParams(publicId)
@@ -65,7 +97,7 @@ namespace Infrastructure.Utilities
             }
         }
 
-        private string ExtractPublicIdFromUrl(string url)
+        private static string ExtractPublicIdFromUrl(string url)
         {
             var uri = new Uri(url);
             var segments = uri.AbsolutePath.Split('/');

@@ -66,6 +66,7 @@ namespace Backend
 
             //Register TokenService
             builder.Services.AddScoped<TokenService>();
+            builder.Services.AddScoped<AiModuleService>();
 
             builder.Services.Configure<AiServiceSettings>(builder.Configuration.GetSection("AiService"));
             builder.Services.AddHttpClient<AiService>((serviceProvider, client) =>

@@ -214,3 +214,42 @@ Please confirm one of the following:
 - **Option 1 (Recommended):** Build exactly F1 + F2 + F3 + F4 in stages B→E.
 - **Option 2:** Start smaller with only F1 + F2 first, then decide.
 - **Option 3:** Add instructor quiz-saving in Stage B (requires DB schema updates now).
+
+---
+
+## 9. Execution Status (Live)
+
+### Decision
+
+- [x] Option 1 approved by project owner.
+
+### Current stage
+
+- [x] Stage B implemented in backend code.
+- [x] Stage B authenticated happy-path test completed.
+- [ ] Stage C not started.
+
+### Stage B implemented endpoints
+
+- `POST /api/ai/modules/{moduleId}/summary`
+- `POST /api/ai/modules/{moduleId}/quiz`
+
+### Stage B test evidence collected
+
+- Build success: `dotnet build Backend.sln`
+- AI health: `GET /api/ai/health` returns `{ "status": "ok" }`
+- Security checks:
+  - summary endpoint without token => `401`
+  - quiz endpoint without token => `401`
+
+### Stage B authenticated evidence
+
+- `CREATE_RESP=User created successfully`
+- `LOGIN_USER_ID=4`
+- `COURSE_ID=2`
+- `MODULE_ID=1`
+- `MODULE_CONTENT_RESP=1`
+- `SUMMARY_PROVIDER=fake`
+- `QUIZ_PROVIDER=fake`
+
+Stage B is now closed and Stage C can start.
