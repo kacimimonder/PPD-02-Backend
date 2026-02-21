@@ -110,7 +110,7 @@ namespace API.Controllers
         [ProducesResponseType(StatusCodes.Status502BadGateway)]
         public async Task<IActionResult> SummaryByModule(
             int moduleId,
-            [FromBody] AiModuleSummaryRequestDto request,
+            [FromBody] AiModuleSummaryRequestDto? request,
             CancellationToken cancellationToken)
         {
             if (!TryGetCurrentUser(out var userId, out var role, out var unauthorizedResult))
@@ -118,6 +118,7 @@ namespace API.Controllers
                 return unauthorizedResult;
             }
 
+            var req = request ?? new AiModuleSummaryRequestDto();
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
@@ -125,7 +126,7 @@ namespace API.Controllers
 
             try
             {
-                var response = await _aiModuleService.GenerateModuleSummaryAsync(moduleId, userId, role, request, cancellationToken);
+                var response = await _aiModuleService.GenerateModuleSummaryAsync(moduleId, userId, role, req, cancellationToken);
                 return Ok(response);
             }
             catch (BadRequestException ex)
@@ -154,7 +155,7 @@ namespace API.Controllers
         [ProducesResponseType(StatusCodes.Status502BadGateway)]
         public async Task<IActionResult> QuizByModule(
             int moduleId,
-            [FromBody] AiModuleQuizRequestDto request,
+            [FromBody] AiModuleQuizRequestDto? request,
             CancellationToken cancellationToken)
         {
             if (!TryGetCurrentUser(out var userId, out var role, out var unauthorizedResult))
@@ -162,6 +163,7 @@ namespace API.Controllers
                 return unauthorizedResult;
             }
 
+            var req = request ?? new AiModuleQuizRequestDto();
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
@@ -169,7 +171,7 @@ namespace API.Controllers
 
             try
             {
-                var response = await _aiModuleService.GenerateModuleQuizAsync(moduleId, userId, role, request, cancellationToken);
+                var response = await _aiModuleService.GenerateModuleQuizAsync(moduleId, userId, role, req, cancellationToken);
                 return Ok(response);
             }
             catch (BadRequestException ex)

@@ -97,6 +97,97 @@ If SQL is not connected, login/user creation fails and authenticated tests canno
 
 ---
 
+## 4.4 Testing AI with real Gemini (non-fake mode)
+
+Before implementing or extending summarization, quizzes, etc., validate the AI pipeline with a real API key.
+
+### Step 1: Get a Gemini API key
+
+1. Go to [Google AI Studio](https://aistudio.google.com/apikey).
+2. Sign in and create an API key (free tier available).
+3. Copy the key.
+
+### Step 2: Configure the Python AI service
+
+In `Application/Services/aiService/.env`:
+
+- Set `GEMINI_API_KEY=<your-pasted-key>` (replace the placeholder).
+- Set `AI_FAKE_MODE=false` so the service calls Gemini instead of returning fake responses.
+
+Example `.env`:
+
+```env
+GEMINI_API_KEY=AIzaSy...
+GEMINI_MODEL=gemini-2.5-flash
+AI_FAKE_MODE=false
+```
+
+### Step 3: Restart the Python AI service
+
+From `Application/Services/aiService`:
+
+```bash
+python -m uvicorn chatbot:app --host 127.0.0.1 --port 8001 --reload
+```
+
+(On Windows PowerShell use the same command.)
+
+### Step 4: Verify health (real mode)
+
+- **Option A – Python directly:**  
+  `GET http://127.0.0.1:8001/health`  
+  Response should include `"provider": "gemini"` and `"fake_mode": false`.
+
+- **Option B – Via .NET:**  
+  In Swagger, call `GET /api/ai/health`.  
+  You should get `200` and the backend will have proxied the Python health (Python must return `"status": "ok"` for the backend to return 200).
+
+### Step 5: Test chat, summary, and quiz via Swagger
+
+1. Log in: `POST /api/User/login` and copy the `token` from the response.
+2. In Swagger, click **Authorize**, paste the token, then **Authorize** / **Close**.
+3. Call these endpoints with the examples below.
+
+**POST /api/ai/chat**
+
+```json
+{
+  "message": "What is object-oriented programming in one sentence?",
+  "language": "en",
+  "history": []
+}
+```
+
+Expected: `200` with `output` containing a short explanation and `provider`: `"gemini"`.
+
+**POST /api/ai/summary**
+
+```json
+{
+  "text": "Object-oriented programming (OOP) is a programming paradigm based on the concept of objects, which can contain data and code. The four pillars are encapsulation, abstraction, inheritance, and polymorphism. Encapsulation bundles data and methods; abstraction hides complexity; inheritance allows code reuse; polymorphism allows different behaviors under the same interface.",
+  "maxBullets": 5,
+  "language": "en"
+}
+```
+
+Expected: `200` with `output` containing bullet points and `provider`: `"gemini"`.
+
+**POST /api/ai/quiz**
+
+```json
+{
+  "text": "SQL is a standard language for managing relational databases. SELECT retrieves data, INSERT adds rows, UPDATE modifies rows, DELETE removes rows. WHERE filters rows; JOIN combines tables. Primary keys uniquely identify rows; foreign keys link tables.",
+  "questionsCount": 3,
+  "language": "en"
+}
+```
+
+Expected: `200` with `output` containing quiz questions (often JSON) and `provider`: `"gemini"`.
+
+If all three return `200` with `provider: "gemini"`, the AI API is working in non-fake mode and you can proceed to implement/refine summarization, quizzes, and other AI features.
+
+---
+
 ## 5) API contracts
 
 ## 5.1 Backend endpoints (frontend should use these)
@@ -169,8 +260,11 @@ If SQL is not connected, login/user creation fails and authenticated tests canno
 4. Authorization rules:
    - Student must be enrolled in the module's course.
    - Instructor must own the module's course.
-5. Backend builds text context from module title/description/content.
-6. Backend calls AI microservice for summary/quiz generation.
+5. Backend builds text context from module title, description, and each section's name and content.
+6. Backend prepends a **module-specific instruction** (e.g. "Context: The following is a single course module. Summarize only this module.") so the AI responds in a module-scoped way.
+7. Backend calls the same AI microservice `/summary` and `/quiz` with this combined text.
+
+**Request body (optional):** You can send `{}` for defaults, or e.g. `{ "maxBullets": 5, "language": "en" }` for summary and `{ "questionsCount": 5, "language": "en" }` for quiz.
 
 ### Stage B tests executed
 

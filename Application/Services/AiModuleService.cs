@@ -33,12 +33,14 @@ namespace Application.Services
             CancellationToken cancellationToken = default)
         {
             var module = await GetAuthorizedModuleAsync(moduleId, userId, role);
-            var content = BuildModuleContext(module);
+            var rawContext = BuildModuleContext(module);
 
-            if (string.IsNullOrWhiteSpace(content))
+            if (string.IsNullOrWhiteSpace(rawContext))
             {
                 throw new BadRequestException("This module has no text content yet to summarize.");
             }
+
+            var content = "Context: The following is a single course module. Summarize only this module for a student.\n\n" + rawContext;
 
             var summaryRequest = new AiSummaryRequestDto
             {
@@ -58,12 +60,14 @@ namespace Application.Services
             CancellationToken cancellationToken = default)
         {
             var module = await GetAuthorizedModuleAsync(moduleId, userId, role);
-            var content = BuildModuleContext(module);
+            var rawContext = BuildModuleContext(module);
 
-            if (string.IsNullOrWhiteSpace(content))
+            if (string.IsNullOrWhiteSpace(rawContext))
             {
                 throw new BadRequestException("This module has no text content yet to generate a quiz.");
             }
+
+            var content = "Context: The following is a single course module. Generate a quiz based only on this module.\n\n" + rawContext;
 
             var quizRequest = new AiQuizRequestDto
             {

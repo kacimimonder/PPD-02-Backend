@@ -53,6 +53,10 @@ API_KEY = os.getenv("GEMINI_API_KEY", "")
 MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 FAKE_MODE = os.getenv("AI_FAKE_MODE", "false").lower() == "true"
 
+# Log mode at startup so you can confirm in the terminal
+import sys
+print(f"[AI Service] FAKE_MODE={FAKE_MODE}, GEMINI_API_KEY set={bool(API_KEY)}", file=sys.stderr)
+
 app = FastAPI(
     title="MiniCoursera AI Service",
     version="1.0.0",
