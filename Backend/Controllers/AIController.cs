@@ -192,6 +192,50 @@ namespace API.Controllers
             }
         }
 
+        [HttpPost("modules/{moduleId:int}/chat")]
+        [ProducesResponseType(typeof(AiTextResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status502BadGateway)]
+        public async Task<IActionResult> ChatByModule(
+            int moduleId,
+            [FromBody] AiModuleChatRequestDto request,
+            CancellationToken cancellationToken)
+        {
+            if (!TryGetCurrentUser(out var userId, out var role, out var unauthorizedResult))
+            {
+                return unauthorizedResult;
+            }
+
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            try
+            {
+                var response = await _aiModuleService.ChatOnModuleAsync(moduleId, userId, role, request, cancellationToken);
+                return Ok(response);
+            }
+            catch (BadRequestException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (ForbiddenException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, ex.Message);
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(StatusCodes.Status502BadGateway, ex.Message);
+            }
+        }
+
         private bool TryGetCurrentUser(out int userId, out string role, out IActionResult unauthorizedResult)
         {
             unauthorizedResult = Unauthorized("Missing or invalid auth claims.");

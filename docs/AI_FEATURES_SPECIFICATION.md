@@ -227,7 +227,8 @@ Please confirm one of the following:
 
 - [x] Stage B implemented in backend code.
 - [x] Stage B authenticated happy-path test completed.
-- [ ] Stage C not started.
+- [x] Stage C implemented and validated.
+- [ ] Stage D not started.
 
 ### Stage B implemented endpoints
 
@@ -253,3 +254,19 @@ Please confirm one of the following:
 - `QUIZ_PROVIDER=fake`
 
 Stage B is now closed and Stage C can start.
+
+### Stage C implemented endpoint
+
+- `POST /api/ai/modules/{moduleId}/chat`
+
+### Stage C validation evidence
+
+- Unauthorized call without token => `401`
+- Authenticated happy-path:
+  - `CHAT_PROVIDER=fake`
+  - `CHAT_MODEL=local-test`
+- AI-provider-down fallback:
+  - `FALLBACK_PROVIDER=backend-fallback`
+  - `FALLBACK_MODEL=n/a`
+
+Stage C is now closed and Stage D can start.
