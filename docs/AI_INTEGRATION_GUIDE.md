@@ -204,6 +204,48 @@ Observed results:
 
 Conclusion: Stage B is fully validated end-to-end.
 
+## Stage C status (implemented)
+
+### What was built
+
+- Added module-grounded chat endpoint:
+  - `POST /api/ai/modules/{moduleId}/chat`
+  - in `Backend/Controllers/AIController.cs`
+- Added module chat request DTO:
+  - `Application/DTOs/AI/AiModuleChatRequestDto.cs`
+- Extended module AI service for grounded chat:
+  - `Application/Services/AiModuleService.cs`
+
+### Stage C technical behavior
+
+1. Backend validates JWT + role and module access.
+2. Backend builds grounded module context from title/description/content.
+3. Backend truncates context (`MaxModuleContextChars = 12000`) to control token size.
+4. Backend trims history (`MaxHistoryMessages = 12`) to control prompt growth.
+5. Backend sends grounded prompt to AI service.
+6. If AI provider is unavailable, backend returns graceful fallback response (`provider=backend-fallback`).
+
+### Stage C tests executed
+
+- Unauthorized test:
+  - `POST /api/ai/modules/1/chat` without token -> `401`
+- Authenticated happy-path:
+  - `CREATE_RESP=User created successfully`
+  - `LOGIN_USER_ID=5`
+  - `COURSE_ID=3`
+  - `MODULE_ID=2`
+  - `MODULE_CONTENT_RESP=2`
+  - `CHAT_PROVIDER=fake`
+  - `CHAT_MODEL=local-test`
+- Provider-down fallback test:
+  - stopped AI microservice
+  - called module chat on owned module
+  - response contained:
+    - `FALLBACK_PROVIDER=backend-fallback`
+    - `FALLBACK_MODEL=n/a`
+
+Conclusion: Stage C is fully validated end-to-end.
+
 ---
 
 ## Stage 2 (recommended next)

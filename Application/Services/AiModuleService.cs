@@ -8,6 +8,9 @@ namespace Application.Services
 {
     public class AiModuleService
     {
+        private const int MaxModuleContextChars = 12000;
+        private const int MaxHistoryMessages = 12;
+
         private readonly ICourseModuleRepository _courseModuleRepository;
         private readonly IEnrollmentRepository _enrollmentRepository;
         private readonly ICourseRepository _courseRepository;
@@ -75,6 +78,63 @@ namespace Application.Services
             return await _aiService.GenerateQuizAsync(quizRequest, cancellationToken);
         }
 
+        public async Task<AiTextResponseDto> ChatOnModuleAsync(
+            int moduleId,
+            int userId,
+            string role,
+            AiModuleChatRequestDto request,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(request.Message))
+            {
+                throw new BadRequestException("Message cannot be empty.");
+            }
+
+            var module = await GetAuthorizedModuleAsync(moduleId, userId, role);
+            var moduleContext = BuildModuleContext(module);
+
+            if (string.IsNullOrWhiteSpace(moduleContext))
+            {
+                throw new BadRequestException("This module has no text content yet for grounded chat.");
+            }
+
+            moduleContext = TrimToMaxChars(moduleContext, MaxModuleContextChars);
+
+            var history = request.History ?? new List<AiChatMessageDto>();
+            if (history.Count > MaxHistoryMessages)
+            {
+                history = history.Skip(history.Count - MaxHistoryMessages).ToList();
+            }
+
+            var groundedMessage =
+                "You are a module-grounded tutor for MiniCoursera. " +
+                "Answer the student's question using the module context below. " +
+                "If the context is insufficient, say so clearly and suggest what part to review.\n\n" +
+                $"Module Context:\n{moduleContext}\n\n" +
+                $"Student Question:\n{request.Message}";
+
+            var chatRequest = new AiChatRequestDto
+            {
+                Message = groundedMessage,
+                Language = request.Language,
+                History = history
+            };
+
+            try
+            {
+                return await _aiService.ChatAsync(chatRequest, cancellationToken);
+            }
+            catch (Exception)
+            {
+                return new AiTextResponseDto
+                {
+                    Provider = "backend-fallback",
+                    Model = "n/a",
+                    Output = "AI chat is temporarily unavailable. Please try again in a moment. For now, review the module title, description, and the first content section to continue learning."
+                };
+            }
+        }
+
         private async Task<CourseModule> GetAuthorizedModuleAsync(int moduleId, int userId, string role)
         {
             var module = await _courseModuleRepository.GetByIdWithContentsAsync(moduleId);
@@ -130,6 +190,16 @@ namespace Application.Services
             }
 
             return buffer.ToString();
+        }
+
+        private static string TrimToMaxChars(string value, int maxChars)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length <= maxChars)
+            {
+                return value;
+            }
+
+            return value[..maxChars];
         }
     }
 }
