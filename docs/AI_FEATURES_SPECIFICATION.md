@@ -1,272 +1,162 @@
-## 1. Recommended Final Scope (Proposed by Copilot)
+# MiniCoursera AI Features Specification
 
-This section proposes a **doable, high-impact scope** for your university project based on your current codebase and SQL schema.
+## 1) Project Goal
 
-### Why these features?
+Deliver practical AI features inside MiniCoursera that are:
 
-- They map directly to your existing data (`Courses`, `CourseModules`, `ModuleContents`, `Enrollments`, `EnrollmentProgresses`).
-- They are clearly demoable in UI.
-- They avoid heavy ML training early, while still feeling smart and useful.
-
-### Proposed Features We Should Build
-
-#### F1) Module Quiz Generation (Student + Instructor)
-
-**User flow:**
-
-- Student opens a module and clicks **Generate Quiz**.
-- System generates 5–10 MCQs from module contents and returns instantly.
-
-**MVP behavior (no schema change):**
-
-- Quiz is generated on demand and returned to frontend.
-- Quiz is not permanently saved.
-
-**Phase-2 behavior (with schema change):**
-
-- Instructor can save generated quiz as editable draft.
-- Student attempts can be recorded.
+- useful for students in daily learning,
+- simple to demo in class,
+- feasible with current architecture and timeline.
 
 ---
 
-#### F2) Module Smart Summary (Student)
+## 2) Implemented Features (Current)
 
-**User flow:**
+### F1. Module Quiz Generation
 
-- Student clicks **Summarize This Module**.
-- System returns concise bullet-point summary from all text content in module.
+**User value**
 
-**MVP behavior:**
+- Students can generate quick practice questions from the current module.
 
-- Summarize only text content (`ModuleContents.Content`).
-- If only videos exist, return clear fallback message.
+**Behavior**
 
----
+- Reads module text content and generates quiz output on demand.
+- Does not persist quiz attempts in the database (MVP choice).
 
-#### F3) Ask AI About This Module (Grounded Chat)
+**Endpoint**
 
-**User flow:**
-
-- Student asks questions inside module page (e.g., "Explain normalization with examples").
-- AI answers using module content context.
-
-**MVP behavior:**
-
-- Prompt includes module content + short conversation history.
-- Chat is session-based (frontend memory), not DB persistence yet.
+- `POST /api/ai/modules/{moduleId}/quiz`
 
 ---
 
-#### F4) Personalized Study Coach (Progress-based)
+### F2. Module Smart Summary
 
-**User flow:**
+**User value**
 
-- Student clicks **My AI Study Plan** on dashboard.
-- System uses enrollment/progress to suggest:
-  - what to study next,
-  - weak areas (low completion),
-  - estimated weekly plan.
+- Students get concise, readable summaries before revision or exams.
 
-**MVP behavior:**
+**Behavior**
 
-- Use rule-based analytics from SQL + LLM for natural-language explanation.
-- No ML model training required.
+- Uses module title/description/content as context.
+- Returns concise bullet-style text response.
 
----
-
-## 2. Features We Should NOT Build Now (Yet)
-
-### Skip for now
-
-- Full dropout prediction ML model.
-- Full RAG + vector DB pipeline.
-- Automatic grading with persistent question banks.
-
-### Why skip now
-
-- Higher implementation risk.
-- More infrastructure and data quality work.
-- Less predictable timeline for university grading.
-
-We can mention these as **future work** in final report.
-
----
-
-## 3. Technical Design (Plain Language)
-
-### Architecture
-
-Frontend -> Backend (.NET, authenticated `/api/ai/*`) -> AI microservice (FastAPI) -> LLM provider
-
-### Data usage per feature
-
-- F1/F2/F3 read from `CourseModules` + `ModuleContents`.
-- F4 reads from `Enrollments` + `EnrollmentProgresses` + module totals.
-
-### Why this is good
-
-- Backend remains source of truth + auth guard.
-- AI service focuses only on prompt logic.
-- Easy to change AI provider later.
-
----
-
-## 4. Staged Build Plan (What we will implement in order)
-
-### Stage A (Already done baseline)
-
-- AI gateway endpoints and microservice scaffold.
-
-### Stage B (First feature set)
-
-1. **Implement F2 Summary by Module ID**
-2. **Implement F1 Quiz by Module ID**
-3. **Test with real module records**
-
-**Checkpoint B deliverable:**
-
-- Frontend can call backend endpoint with `moduleId` and get summary/quiz.
-
-### Stage C (Second feature set)
-
-1. **Implement F3 grounded module chat**
-2. Add token-budgeting and context truncation
-3. Add basic safety checks and fallback responses
-
-**Checkpoint C deliverable:**
-
-- Student can ask contextual questions and get grounded responses.
-
-### Stage D (Third feature set)
-
-1. **Implement F4 study coach endpoint**
-2. Build SQL aggregation query for student progress signals
-3. Generate structured plan output (weekly plan + priorities)
-
-**Checkpoint D deliverable:**
-
-- Student dashboard gets personalized recommendations.
-
-### Stage E (Hardening)
-
-1. Add caching and rate limiting
-2. Add request/response logs and usage metrics
-3. Document API contracts and failure behavior
-
----
-
-## 5. API Endpoints to Build (Backend-facing contract)
-
-### Student endpoints
+**Endpoint**
 
 - `POST /api/ai/modules/{moduleId}/summary`
-- `POST /api/ai/modules/{moduleId}/quiz`
+
+---
+
+### F3. Grounded Module Chat
+
+**User value**
+
+- Students can ask natural-language questions while staying inside the module context.
+
+**Behavior**
+
+- Uses module context + limited recent chat history.
+- Applies prompt-size controls to keep responses stable.
+- Returns graceful fallback if the AI provider is unavailable.
+
+**Endpoint**
+
 - `POST /api/ai/modules/{moduleId}/chat`
+
+---
+
+### Foundation Capability
+
+- `GET /api/ai/health` checks whether AI service is reachable.
+
+---
+
+## 3) Architecture (Non-Technical Summary)
+
+Frontend -> Backend (.NET API) -> AI Microservice (FastAPI/Python) -> LLM Provider
+
+**Why this architecture works for the project**
+
+- Backend keeps authentication and authorization centralized.
+- AI provider keys stay outside frontend.
+- AI logic is isolated and can be changed without breaking app APIs.
+
+---
+
+## 4) Security and Access Rules
+
+- AI endpoints require authenticated users.
+- Allowed roles: Student and Instructor.
+- Students can use module AI only if enrolled in that course.
+- Instructors can use module AI only for courses they own.
+
+---
+
+## 5) Validation Summary (Evidence)
+
+### Build and service checks
+
+- `dotnet build Backend.sln` passed.
+- `GET /api/ai/health` returned service available.
+
+### Security checks
+
+- Protected AI endpoints without token returned `401`.
+
+### Authenticated happy-path checks
+
+- Created user, logged in, created course/module/content, then called AI endpoints.
+- Verified successful responses from summary/quiz/chat endpoints.
+
+### Resilience checks
+
+- When AI provider was unavailable, module chat returned a controlled fallback response.
+
+---
+
+## 6) Team Contribution Mapping
+
+### Moundir
+
+- Implemented initial chatbot/microservice foundation.
+- Co-authored and maintained AI feature specification and scope decisions.
+
+### Akram
+
+- Implemented quiz generation feature integration.
+- Executed and validated HTTP endpoint/URL testing for AI routes.
+
+### Islem
+
+- Implemented summary feature integration.
+- Suggested additional contribution: grounded chat experience tuning (context formatting + safe fallback behavior).
+
+---
+
+## 7) Next Planned Feature (Stage D)
+
+### F4. Personalized Study Plan (Planned)
+
+**Target endpoint**
+
 - `GET /api/ai/students/{studentId}/study-plan`
 
-### Internal behavior
+**Planned behavior**
 
-- Backend validates role + ownership/enrollment.
-- Backend fetches required DB context.
-- Backend calls AI service with normalized payload.
-- Backend returns clean response DTO to frontend.
+- Use enrollment and progress signals to suggest:
+  - what to study next,
+  - weak areas,
+  - weekly study priorities.
 
----
+**Status**
 
-## 6. Testing Plan (Must pass before moving stages)
-
-### Stage B tests
-
-- Unit test: module content aggregation logic.
-- Integration test: summary/quiz endpoint returns success with valid module.
-- Negative test: invalid moduleId returns `404`.
-
-### Stage C tests
-
-- Prompt truncation tests for long module text.
-- Safety fallback test when AI provider fails.
-- Unauthorized user gets `401/403`.
-
-### Stage D tests
-
-- Progress analytics SQL returns expected completion percentages.
-- Study plan endpoint returns deterministic structure.
+- Not started yet.
 
 ---
 
-## 7. Backend Integration Instructions (for teammate)
+## 8) Out-of-Scope for Current MVP
 
-1. Add AI controller routes by **moduleId** and **studentId**.
-2. In service layer, add methods to gather:
-   - module text blocks,
-   - student completion signals.
-3. Map responses to DTOs (summary, quiz, chat, study-plan).
-4. Enforce role checks and enrollment checks before AI calls.
-5. Add appsettings values for AI service timeout/base URL.
-6. Add logs around AI latency, failure count, and token/usage metadata.
+- Full ML dropout prediction.
+- Full RAG/vector database pipeline.
+- Persistent AI grading workflows.
 
----
-
-## 8. Decision Request (Approve/Adjust)
-
-Please confirm one of the following:
-
-- **Option 1 (Recommended):** Build exactly F1 + F2 + F3 + F4 in stages B→E.
-- **Option 2:** Start smaller with only F1 + F2 first, then decide.
-- **Option 3:** Add instructor quiz-saving in Stage B (requires DB schema updates now).
-
----
-
-## 9. Execution Status (Live)
-
-### Decision
-
-- [x] Option 1 approved by project owner.
-
-### Current stage
-
-- [x] Stage B implemented in backend code.
-- [x] Stage B authenticated happy-path test completed.
-- [x] Stage C implemented and validated.
-- [ ] Stage D not started.
-
-### Stage B implemented endpoints
-
-- `POST /api/ai/modules/{moduleId}/summary`
-- `POST /api/ai/modules/{moduleId}/quiz`
-
-### Stage B test evidence collected
-
-- Build success: `dotnet build Backend.sln`
-- AI health: `GET /api/ai/health` returns `{ "status": "ok" }`
-- Security checks:
-  - summary endpoint without token => `401`
-  - quiz endpoint without token => `401`
-
-### Stage B authenticated evidence
-
-- `CREATE_RESP=User created successfully`
-- `LOGIN_USER_ID=4`
-- `COURSE_ID=2`
-- `MODULE_ID=1`
-- `MODULE_CONTENT_RESP=1`
-- `SUMMARY_PROVIDER=fake`
-- `QUIZ_PROVIDER=fake`
-
-Stage B is now closed and Stage C can start.
-
-### Stage C implemented endpoint
-
-- `POST /api/ai/modules/{moduleId}/chat`
-
-### Stage C validation evidence
-
-- Unauthorized call without token => `401`
-- Authenticated happy-path:
-  - `CHAT_PROVIDER=fake`
-  - `CHAT_MODEL=local-test`
-- AI-provider-down fallback:
-  - `FALLBACK_PROVIDER=backend-fallback`
-  - `FALLBACK_MODEL=n/a`
-
-Stage C is now closed and Stage D can start.
+These remain suitable as future work after Stage D/E.
