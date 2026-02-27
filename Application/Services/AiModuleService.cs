@@ -19,10 +19,7 @@ namespace Application.Services
         private readonly IEnrollmentRepository _enrollmentRepository;
         private readonly ICourseRepository _courseRepository;
         private readonly AiService _aiService;
-<<<<<<< HEAD
-=======
         private readonly AiConversationMemoryService _conversationMemory;
->>>>>>> e24d4959e9f68da5633d21352029b965ebd66ea0
         private readonly ILogger<AiModuleService> _logger;
 
         public AiModuleService(
@@ -30,20 +27,14 @@ namespace Application.Services
             IEnrollmentRepository enrollmentRepository,
             ICourseRepository courseRepository,
             AiService aiService,
-<<<<<<< HEAD
-=======
             AiConversationMemoryService conversationMemory,
->>>>>>> e24d4959e9f68da5633d21352029b965ebd66ea0
             ILogger<AiModuleService> logger)
         {
             _courseModuleRepository = courseModuleRepository;
             _enrollmentRepository = enrollmentRepository;
             _courseRepository = courseRepository;
             _aiService = aiService;
-<<<<<<< HEAD
-=======
             _conversationMemory = conversationMemory;
->>>>>>> e24d4959e9f68da5633d21352029b965ebd66ea0
             _logger = logger;
         }
 
@@ -54,7 +45,6 @@ namespace Application.Services
             AiModuleSummaryRequestDto request,
             CancellationToken cancellationToken = default)
         {
-            // Validate input
             ValidateSummaryRequest(request);
 
             var module = await GetAuthorizedModuleAsync(moduleId, userId, role);
@@ -65,7 +55,6 @@ namespace Application.Services
                 throw new BadRequestException("This module has insufficient text content to summarize.");
             }
 
-            // Build context with summary-specific formatting
             var content = BuildSummaryContext(module, request.Mode);
 
             var summaryRequest = new AiSummaryRequestDto
@@ -94,7 +83,6 @@ namespace Application.Services
             AiModuleQuizRequestDto request,
             CancellationToken cancellationToken = default)
         {
-            // Validate input
             ValidateQuizRequest(request);
 
             var module = await GetAuthorizedModuleAsync(moduleId, userId, role);
@@ -105,7 +93,6 @@ namespace Application.Services
                 throw new BadRequestException("This module has insufficient text content to generate a quiz.");
             }
 
-            // Build context with quiz-specific formatting
             var content = BuildQuizContext(module);
 
             var quizRequest = new AiQuizRequestDto
@@ -135,7 +122,6 @@ namespace Application.Services
             AiModuleChatRequestDto request,
             CancellationToken cancellationToken = default)
         {
-            // Validate input - comprehensive edge case handling
             ValidateChatRequest(request);
 
             var module = await GetAuthorizedModuleAsync(moduleId, userId, role);
@@ -172,7 +158,6 @@ namespace Application.Services
                 history = history.Skip(history.Count - MaxHistoryMessages).ToList();
             }
 
-            // Build grounded chat context with enhanced formatting
             var systemPrompt = BuildGroundedChatSystemPrompt(module, request.Language);
             var userMessage = BuildGroundedChatUserMessage(moduleContext, request.Message);
 
@@ -188,21 +173,47 @@ namespace Application.Services
             try
             {
                 var response = await _aiService.ChatAsync(chatRequest, cancellationToken);
-<<<<<<< HEAD
-                
-                // Validate response
                 if (response == null || string.IsNullOrWhiteSpace(response.Output))
                 {
                     _logger.LogWarning("Empty response from AI chat for module {ModuleId}", moduleId);
-                    return CreateSafeFallbackResponse("chat");
+                    var emptyFallback = CreateGroundedFallbackResponse(module);
+                    emptyFallback.ConversationId = conversationId;
+                    return emptyFallback;
                 }
-                
+
+                if (request.UseServerMemory)
+                {
+                    var updatedHistory = history
+                        .Append(new AiChatMessageDto { Role = "user", Content = request.Message.Trim() })
+                        .Append(new AiChatMessageDto { Role = "assistant", Content = response.Output })
+                        .ToList();
+
+                    _conversationMemory.SaveHistory(conversationKey, updatedHistory);
+                }
+
+                response.ConversationId = conversationId;
+
+                _logger.LogInformation(
+                    "Module chat success for user {UserId}, module {ModuleId}, conversation {ConversationId}, historyCount {HistoryCount}",
+                    userId,
+                    moduleId,
+                    conversationId,
+                    history.Count);
+
                 return response;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Chat failed for module {ModuleId}", moduleId);
-                return CreateGroundedFallbackResponse(module);
+                _logger.LogError(
+                    ex,
+                    "Module chat failed for user {UserId}, module {ModuleId}, conversation {ConversationId}",
+                    userId,
+                    moduleId,
+                    conversationId);
+
+                var fallback = CreateGroundedFallbackResponse(module);
+                fallback.ConversationId = conversationId;
+                return fallback;
             }
         }
 
@@ -242,12 +253,6 @@ namespace Application.Services
             {
                 throw new BadRequestException("Language code cannot exceed 8 characters.");
             }
-
-            // Validate difficulty enum
-            if (!Enum.IsDefined(typeof(QuizDifficulty), request.Difficulty))
-            {
-                request.Difficulty = QuizDifficulty.Medium;
-            }
         }
 
         private static void ValidateChatRequest(AiModuleChatRequestDto request)
@@ -273,7 +278,6 @@ namespace Application.Services
                 throw new BadRequestException("Message must be at least 2 characters.");
             }
 
-            // Check for suspicious patterns (basic spam/injection detection)
             if (ContainsSuspiciousPattern(trimmedMessage))
             {
                 throw new BadRequestException("Message contains suspicious patterns.");
@@ -284,7 +288,6 @@ namespace Application.Services
                 throw new BadRequestException("Language code cannot exceed 8 characters.");
             }
 
-            // Validate history
             if (request.History != null)
             {
                 foreach (var msg in request.History)
@@ -293,6 +296,7 @@ namespace Application.Services
                     {
                         throw new BadRequestException("History messages cannot have empty content.");
                     }
+
                     if (msg.Content.Length > MaxMessageLength)
                     {
                         throw new BadRequestException("History message content exceeds maximum length.");
@@ -303,7 +307,6 @@ namespace Application.Services
 
         private static bool ContainsSuspiciousPattern(string message)
         {
-            // Detection of potential prompt injection attempts - more specific patterns
             var suspiciousPatterns = new[]
             {
                 "ignore previous instructions",
@@ -311,7 +314,7 @@ namespace Application.Services
                 "you are now a different",
                 "new system prompt",
                 "<script>alert(",
-                "javascript:alert(",
+                "javascript:alert("
             };
 
             var lowerMessage = message.ToLowerInvariant();
@@ -336,65 +339,10 @@ namespace Application.Services
             foreach (var content in module.ModuleContents)
             {
                 if (string.IsNullOrWhiteSpace(content?.Content))
-=======
-
-                if (request.UseServerMemory)
-                {
-                    var updatedHistory = history
-                        .Append(new AiChatMessageDto { Role = "user", Content = request.Message.Trim() })
-                        .Append(new AiChatMessageDto { Role = "assistant", Content = response.Output })
-                        .ToList();
-
-                    _conversationMemory.SaveHistory(conversationKey, updatedHistory);
-                }
-
-                response.ConversationId = conversationId;
-
-                _logger.LogInformation(
-                    "Module chat success for user {UserId}, module {ModuleId}, conversation {ConversationId}, historyCount {HistoryCount}",
-                    userId,
-                    moduleId,
-                    conversationId,
-                    history.Count);
-
-                return response;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "Module chat failed for user {UserId}, module {ModuleId}, conversation {ConversationId}",
-                    userId,
-                    moduleId,
-                    conversationId);
-
-                return new AiTextResponseDto
-                {
-                    Provider = "backend-fallback",
-                    Model = "n/a",
-                    Output = "AI chat is temporarily unavailable. Please try again in a moment. For now, review the module title, description, and the first content section to continue learning.",
-                    ConversationId = conversationId
-                };
-            }
-        }
-
-        private static List<AiChatMessageDto> NormalizeHistory(IEnumerable<AiChatMessageDto>? history)
-        {
-            if (history == null)
-            {
-                return new List<AiChatMessageDto>();
-            }
-
-            var normalized = new List<AiChatMessageDto>();
-            foreach (var message in history)
-            {
-                if (message == null || string.IsNullOrWhiteSpace(message.Content))
->>>>>>> e24d4959e9f68da5633d21352029b965ebd66ea0
                 {
                     continue;
                 }
 
-<<<<<<< HEAD
                 buffer.AppendLine($"Section: {content.Name}");
                 buffer.AppendLine(content.Content);
             }
@@ -405,13 +353,13 @@ namespace Application.Services
         private static string BuildSummaryContext(CourseModule module, SummaryMode mode)
         {
             var buffer = new StringBuilder();
-            var modeDescription = mode == SummaryMode.Detailed 
-                ? "Provide a detailed, comprehensive summary in paragraph form." 
+            var modeDescription = mode == SummaryMode.Detailed
+                ? "Provide a detailed, comprehensive summary in paragraph form."
                 : "Provide a concise summary with key bullet points.";
 
-            buffer.AppendLine($"Context: Course module from MiniCoursera learning platform.");
+            buffer.AppendLine("Context: Course module from MiniCoursera learning platform.");
             buffer.AppendLine($"Instruction: {modeDescription}");
-            buffer.AppendLine($"Focus on key concepts, definitions, and learning objectives.\n");
+            buffer.AppendLine("Focus on key concepts, definitions, and learning objectives.\n");
             buffer.AppendLine($"Module: {module.Name}");
             buffer.AppendLine($"Description: {module.Description}\n");
 
@@ -455,7 +403,7 @@ namespace Application.Services
         private static string BuildGroundedChatSystemPrompt(CourseModule module, string? language)
         {
             var languageName = GetLanguageName(language);
-            
+
             return $@"You are a module-grounded tutor for MiniCoursera, an online learning platform.
 Your role is to help students understand the course material by answering questions based ONLY on the provided module context.
 
@@ -491,7 +439,9 @@ Answer based on the module context:";
         private static string GetLanguageName(string? languageCode)
         {
             if (string.IsNullOrWhiteSpace(languageCode))
+            {
                 return "English";
+            }
 
             return languageCode.ToLowerInvariant() switch
             {
@@ -534,26 +484,39 @@ Answer based on the module context:";
         {
             var moduleName = module.Name ?? "this module";
             var moduleDescription = module.Description ?? "the course content";
-            
+
             return new AiTextResponseDto
             {
                 Provider = "backend-fallback",
                 Model = "grounded-fallback",
-                Output = $"I apologize, but I'm temporarily unable to process your question. " +
-                        $"For now, please review '{moduleName}' - {moduleDescription}. " +
-                        $"Try asking a question about a specific concept from the module content."
+                Output = $"I apologize, but I'm temporarily unable to process your question. For now, please review '{moduleName}' - {moduleDescription}. Try asking a question about a specific concept from the module content."
             };
         }
 
         #endregion
 
         #region Helper Methods
-=======
+
+        private static List<AiChatMessageDto> NormalizeHistory(IEnumerable<AiChatMessageDto>? history)
+        {
+            if (history == null)
+            {
+                return new List<AiChatMessageDto>();
+            }
+
+            var normalized = new List<AiChatMessageDto>();
+            foreach (var message in history)
+            {
+                if (message == null || string.IsNullOrWhiteSpace(message.Content))
+                {
+                    continue;
+                }
+
                 var role = NormalizeRole(message.Role);
                 var content = message.Content.Trim();
-                if (content.Length > 4000)
+                if (content.Length > MaxMessageLength)
                 {
-                    content = content[..4000];
+                    content = content[..MaxMessageLength];
                 }
 
                 normalized.Add(new AiChatMessageDto
@@ -574,7 +537,6 @@ Answer based on the module context:";
 
         private static string BuildConversationKey(int moduleId, int userId, string conversationId)
             => $"module:{moduleId}:user:{userId}:conversation:{conversationId}";
->>>>>>> e24d4959e9f68da5633d21352029b965ebd66ea0
 
         private async Task<CourseModule> GetAuthorizedModuleAsync(int moduleId, int userId, string role)
         {
