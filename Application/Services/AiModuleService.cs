@@ -3,6 +3,7 @@ using Application.DTOs.AI;
 using Application.Exceptions;
 using Domain.Entities;
 using Domain.Interfaces;
+using Microsoft.Extensions.Logging;
 
 namespace Application.Services
 {
@@ -10,22 +11,28 @@ namespace Application.Services
     {
         private const int MaxModuleContextChars = 12000;
         private const int MaxHistoryMessages = 12;
+        private const int MaxMessageLength = 4000;
+        private const int MinTextLength = 10;
+        private const int MinQuizTextLength = 30;
 
         private readonly ICourseModuleRepository _courseModuleRepository;
         private readonly IEnrollmentRepository _enrollmentRepository;
         private readonly ICourseRepository _courseRepository;
         private readonly AiService _aiService;
+        private readonly ILogger<AiModuleService> _logger;
 
         public AiModuleService(
             ICourseModuleRepository courseModuleRepository,
             IEnrollmentRepository enrollmentRepository,
             ICourseRepository courseRepository,
-            AiService aiService)
+            AiService aiService,
+            ILogger<AiModuleService> logger)
         {
             _courseModuleRepository = courseModuleRepository;
             _enrollmentRepository = enrollmentRepository;
             _courseRepository = courseRepository;
             _aiService = aiService;
+            _logger = logger;
         }
 
         public async Task<AiTextResponseDto> GenerateModuleSummaryAsync(
@@ -35,24 +42,37 @@ namespace Application.Services
             AiModuleSummaryRequestDto request,
             CancellationToken cancellationToken = default)
         {
+            // Validate input
+            ValidateSummaryRequest(request);
+
             var module = await GetAuthorizedModuleAsync(moduleId, userId, role);
             var rawContext = BuildModuleContext(module);
 
-            if (string.IsNullOrWhiteSpace(rawContext))
+            if (string.IsNullOrWhiteSpace(rawContext) || rawContext.Length < MinTextLength)
             {
-                throw new BadRequestException("This module has no text content yet to summarize.");
+                throw new BadRequestException("This module has insufficient text content to summarize.");
             }
 
-            var content = "Context: The following is a single course module. Summarize only this module for a student.\n\n" + rawContext;
+            // Build context with summary-specific formatting
+            var content = BuildSummaryContext(module, request.Mode);
 
             var summaryRequest = new AiSummaryRequestDto
             {
                 Text = content,
                 MaxBullets = request.MaxBullets,
-                Language = request.Language
+                Language = request.Language ?? "en",
+                Mode = request.Mode
             };
 
-            return await _aiService.SummarizeAsync(summaryRequest, cancellationToken);
+            try
+            {
+                return await _aiService.SummarizeAsync(summaryRequest, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Summary generation failed for module {ModuleId}", moduleId);
+                return CreateSafeFallbackResponse("summary");
+            }
         }
 
         public async Task<AiTextResponseDto> GenerateModuleQuizAsync(
@@ -62,24 +82,38 @@ namespace Application.Services
             AiModuleQuizRequestDto request,
             CancellationToken cancellationToken = default)
         {
+            // Validate input
+            ValidateQuizRequest(request);
+
             var module = await GetAuthorizedModuleAsync(moduleId, userId, role);
             var rawContext = BuildModuleContext(module);
 
-            if (string.IsNullOrWhiteSpace(rawContext))
+            if (string.IsNullOrWhiteSpace(rawContext) || rawContext.Length < MinQuizTextLength)
             {
-                throw new BadRequestException("This module has no text content yet to generate a quiz.");
+                throw new BadRequestException("This module has insufficient text content to generate a quiz.");
             }
 
-            var content = "Context: The following is a single course module. Generate a quiz based only on this module.\n\n" + rawContext;
+            // Build context with quiz-specific formatting
+            var content = BuildQuizContext(module);
 
             var quizRequest = new AiQuizRequestDto
             {
                 Text = content,
                 QuestionsCount = request.QuestionsCount,
-                Language = request.Language
+                Language = request.Language ?? "en",
+                Difficulty = request.Difficulty,
+                IncludeExplanations = request.IncludeExplanations
             };
 
-            return await _aiService.GenerateQuizAsync(quizRequest, cancellationToken);
+            try
+            {
+                return await _aiService.GenerateQuizAsync(quizRequest, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Quiz generation failed for module {ModuleId}", moduleId);
+                return CreateSafeFallbackResponse("quiz");
+            }
         }
 
         public async Task<AiTextResponseDto> ChatOnModuleAsync(
@@ -89,17 +123,15 @@ namespace Application.Services
             AiModuleChatRequestDto request,
             CancellationToken cancellationToken = default)
         {
-            if (string.IsNullOrWhiteSpace(request.Message))
-            {
-                throw new BadRequestException("Message cannot be empty.");
-            }
+            // Validate input - comprehensive edge case handling
+            ValidateChatRequest(request);
 
             var module = await GetAuthorizedModuleAsync(moduleId, userId, role);
             var moduleContext = BuildModuleContext(module);
 
-            if (string.IsNullOrWhiteSpace(moduleContext))
+            if (string.IsNullOrWhiteSpace(moduleContext) || moduleContext.Length < MinTextLength)
             {
-                throw new BadRequestException("This module has no text content yet for grounded chat.");
+                throw new BadRequestException("This module has insufficient text content for grounded chat.");
             }
 
             moduleContext = TrimToMaxChars(moduleContext, MaxModuleContextChars);
@@ -110,34 +142,326 @@ namespace Application.Services
                 history = history.Skip(history.Count - MaxHistoryMessages).ToList();
             }
 
-            var groundedMessage =
-                "You are a module-grounded tutor for MiniCoursera. " +
-                "Answer the student's question using the module context below. " +
-                "If the context is insufficient, say so clearly and suggest what part to review.\n\n" +
-                $"Module Context:\n{moduleContext}\n\n" +
-                $"Student Question:\n{request.Message}";
+            // Build grounded chat context with enhanced formatting
+            var systemPrompt = BuildGroundedChatSystemPrompt(module, request.Language);
+            var userMessage = BuildGroundedChatUserMessage(moduleContext, request.Message);
 
             var chatRequest = new AiChatRequestDto
             {
-                Message = groundedMessage,
-                Language = request.Language,
-                History = history
+                Message = userMessage,
+                Language = request.Language ?? "en",
+                History = history,
+                Context = systemPrompt,
+                StrictGrounded = true
             };
 
             try
             {
-                return await _aiService.ChatAsync(chatRequest, cancellationToken);
-            }
-            catch (Exception)
-            {
-                return new AiTextResponseDto
+                var response = await _aiService.ChatAsync(chatRequest, cancellationToken);
+                
+                // Validate response
+                if (response == null || string.IsNullOrWhiteSpace(response.Output))
                 {
-                    Provider = "backend-fallback",
-                    Model = "n/a",
-                    Output = "AI chat is temporarily unavailable. Please try again in a moment. For now, review the module title, description, and the first content section to continue learning."
-                };
+                    _logger.LogWarning("Empty response from AI chat for module {ModuleId}", moduleId);
+                    return CreateSafeFallbackResponse("chat");
+                }
+                
+                return response;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Chat failed for module {ModuleId}", moduleId);
+                return CreateGroundedFallbackResponse(module);
             }
         }
+
+        #region Validation Methods
+
+        private static void ValidateSummaryRequest(AiModuleSummaryRequestDto request)
+        {
+            if (request == null)
+            {
+                throw new BadRequestException("Request cannot be null.");
+            }
+
+            if (request.MaxBullets < 3 || request.MaxBullets > 15)
+            {
+                throw new BadRequestException("Max bullets must be between 3 and 15.");
+            }
+
+            if (!string.IsNullOrEmpty(request.Language) && request.Language.Length > 8)
+            {
+                throw new BadRequestException("Language code cannot exceed 8 characters.");
+            }
+        }
+
+        private static void ValidateQuizRequest(AiModuleQuizRequestDto request)
+        {
+            if (request == null)
+            {
+                throw new BadRequestException("Request cannot be null.");
+            }
+
+            if (request.QuestionsCount < 3 || request.QuestionsCount > 15)
+            {
+                throw new BadRequestException("Questions count must be between 3 and 15.");
+            }
+
+            if (!string.IsNullOrEmpty(request.Language) && request.Language.Length > 8)
+            {
+                throw new BadRequestException("Language code cannot exceed 8 characters.");
+            }
+
+            // Validate difficulty enum
+            if (!Enum.IsDefined(typeof(QuizDifficulty), request.Difficulty))
+            {
+                request.Difficulty = QuizDifficulty.Medium;
+            }
+        }
+
+        private static void ValidateChatRequest(AiModuleChatRequestDto request)
+        {
+            if (request == null)
+            {
+                throw new BadRequestException("Request cannot be null.");
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Message))
+            {
+                throw new BadRequestException("Message cannot be empty.");
+            }
+
+            var trimmedMessage = request.Message.Trim();
+            if (trimmedMessage.Length > MaxMessageLength)
+            {
+                throw new BadRequestException($"Message cannot exceed {MaxMessageLength} characters.");
+            }
+
+            if (trimmedMessage.Length < 2)
+            {
+                throw new BadRequestException("Message must be at least 2 characters.");
+            }
+
+            // Check for suspicious patterns (basic spam/injection detection)
+            if (ContainsSuspiciousPattern(trimmedMessage))
+            {
+                throw new BadRequestException("Message contains suspicious patterns.");
+            }
+
+            if (!string.IsNullOrEmpty(request.Language) && request.Language.Length > 8)
+            {
+                throw new BadRequestException("Language code cannot exceed 8 characters.");
+            }
+
+            // Validate history
+            if (request.History != null)
+            {
+                foreach (var msg in request.History)
+                {
+                    if (string.IsNullOrWhiteSpace(msg.Content))
+                    {
+                        throw new BadRequestException("History messages cannot have empty content.");
+                    }
+                    if (msg.Content.Length > MaxMessageLength)
+                    {
+                        throw new BadRequestException("History message content exceeds maximum length.");
+                    }
+                }
+            }
+        }
+
+        private static bool ContainsSuspiciousPattern(string message)
+        {
+            // Detection of potential prompt injection attempts - more specific patterns
+            var suspiciousPatterns = new[]
+            {
+                "ignore previous instructions",
+                "disregard all previous",
+                "you are now a different",
+                "new system prompt",
+                "<script>alert(",
+                "javascript:alert(",
+            };
+
+            var lowerMessage = message.ToLowerInvariant();
+            return suspiciousPatterns.Any(pattern => lowerMessage.Contains(pattern));
+        }
+
+        #endregion
+
+        #region Context Building Methods
+
+        private static string BuildModuleContext(CourseModule module)
+        {
+            var buffer = new StringBuilder();
+            buffer.AppendLine($"Module Title: {module.Name}");
+            buffer.AppendLine($"Module Description: {module.Description}");
+
+            if (module.ModuleContents == null)
+            {
+                return buffer.ToString();
+            }
+
+            foreach (var content in module.ModuleContents)
+            {
+                if (string.IsNullOrWhiteSpace(content?.Content))
+                {
+                    continue;
+                }
+
+                buffer.AppendLine($"Section: {content.Name}");
+                buffer.AppendLine(content.Content);
+            }
+
+            return buffer.ToString();
+        }
+
+        private static string BuildSummaryContext(CourseModule module, SummaryMode mode)
+        {
+            var buffer = new StringBuilder();
+            var modeDescription = mode == SummaryMode.Detailed 
+                ? "Provide a detailed, comprehensive summary in paragraph form." 
+                : "Provide a concise summary with key bullet points.";
+
+            buffer.AppendLine($"Context: Course module from MiniCoursera learning platform.");
+            buffer.AppendLine($"Instruction: {modeDescription}");
+            buffer.AppendLine($"Focus on key concepts, definitions, and learning objectives.\n");
+            buffer.AppendLine($"Module: {module.Name}");
+            buffer.AppendLine($"Description: {module.Description}\n");
+
+            if (module.ModuleContents != null)
+            {
+                buffer.AppendLine("Content sections:");
+                foreach (var content in module.ModuleContents.Where(c => !string.IsNullOrWhiteSpace(c?.Content)))
+                {
+                    buffer.AppendLine($"\n=== {content.Name} ===");
+                    buffer.AppendLine(content.Content);
+                }
+            }
+
+            return buffer.ToString();
+        }
+
+        private static string BuildQuizContext(CourseModule module)
+        {
+            var buffer = new StringBuilder();
+            buffer.AppendLine("Context: Generate a multiple-choice quiz based on the following course module content.");
+            buffer.AppendLine("Instructions:");
+            buffer.AppendLine("- Create questions that test understanding, application, and analysis");
+            buffer.AppendLine("- Include 4 options per question with one correct answer");
+            buffer.AppendLine("- Make questions relevant to the actual content\n");
+            buffer.AppendLine($"Module: {module.Name}");
+            buffer.AppendLine($"Description: {module.Description}\n");
+
+            if (module.ModuleContents != null)
+            {
+                buffer.AppendLine("Content to base quiz on:");
+                foreach (var content in module.ModuleContents.Where(c => !string.IsNullOrWhiteSpace(c?.Content)))
+                {
+                    buffer.AppendLine($"\n=== {content.Name} ===");
+                    buffer.AppendLine(content.Content);
+                }
+            }
+
+            return buffer.ToString();
+        }
+
+        private static string BuildGroundedChatSystemPrompt(CourseModule module, string? language)
+        {
+            var languageName = GetLanguageName(language);
+            
+            return $@"You are a module-grounded tutor for MiniCoursera, an online learning platform.
+Your role is to help students understand the course material by answering questions based ONLY on the provided module context.
+
+## Guidelines:
+1. Answer questions using ONLY information from the module context provided
+2. If the answer cannot be derived from the context, explicitly state: 'This information is not covered in the module. Please review the module content for more details.'
+3. Be encouraging and supportive
+4. Use clear, simple language
+5. Provide examples when helpful
+6. If asked about topics not covered in the module, suggest which part of the module to review
+
+## Current Module:
+Title: {module.Name}
+Description: {module.Description}
+
+## Language:
+Respond in {languageName}.";
+        }
+
+        private static string BuildGroundedChatUserMessage(string moduleContext, string userQuestion)
+        {
+            return $@"Use the module context below to answer the student's question.
+
+## Module Context:
+{moduleContext}
+
+## Student Question:
+{userQuestion}
+
+Answer based on the module context:";
+        }
+
+        private static string GetLanguageName(string? languageCode)
+        {
+            if (string.IsNullOrWhiteSpace(languageCode))
+                return "English";
+
+            return languageCode.ToLowerInvariant() switch
+            {
+                "en" => "English",
+                "fr" => "French",
+                "es" => "Spanish",
+                "de" => "German",
+                "ar" => "Arabic",
+                "zh" => "Chinese",
+                "ja" => "Japanese",
+                "pt" => "Portuguese",
+                "it" => "Italian",
+                "ru" => "Russian",
+                _ => "English"
+            };
+        }
+
+        #endregion
+
+        #region Fallback Methods
+
+        private static AiTextResponseDto CreateSafeFallbackResponse(string type)
+        {
+            var fallbackMessages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["summary"] = "I apologize, but I'm temporarily unable to generate a summary. Please try again in a moment. In the meantime, review the module title and description to get an overview of the content.",
+                ["quiz"] = "I apologize, but I'm temporarily unable to generate a quiz. Please try again in a moment. To practice, try creating your own questions based on the module content.",
+                ["chat"] = "AI chat is temporarily unavailable. Please try again in a moment. For now, review the module title, description, and content sections to continue learning."
+            };
+
+            return new AiTextResponseDto
+            {
+                Provider = "backend-fallback",
+                Model = "safe-fallback",
+                Output = fallbackMessages.GetValueOrDefault(type, "An error occurred. Please try again.")
+            };
+        }
+
+        private static AiTextResponseDto CreateGroundedFallbackResponse(CourseModule module)
+        {
+            var moduleName = module.Name ?? "this module";
+            var moduleDescription = module.Description ?? "the course content";
+            
+            return new AiTextResponseDto
+            {
+                Provider = "backend-fallback",
+                Model = "grounded-fallback",
+                Output = $"I apologize, but I'm temporarily unable to process your question. " +
+                        $"For now, please review '{moduleName}' - {moduleDescription}. " +
+                        $"Try asking a question about a specific concept from the module content."
+            };
+        }
+
+        #endregion
+
+        #region Helper Methods
 
         private async Task<CourseModule> GetAuthorizedModuleAsync(int moduleId, int userId, string role)
         {
@@ -171,31 +495,6 @@ namespace Application.Services
             return module;
         }
 
-        private static string BuildModuleContext(CourseModule module)
-        {
-            var buffer = new StringBuilder();
-            buffer.AppendLine($"Module Title: {module.Name}");
-            buffer.AppendLine($"Module Description: {module.Description}");
-
-            if (module.ModuleContents == null)
-            {
-                return buffer.ToString();
-            }
-
-            foreach (var content in module.ModuleContents)
-            {
-                if (string.IsNullOrWhiteSpace(content?.Content))
-                {
-                    continue;
-                }
-
-                buffer.AppendLine($"Section: {content.Name}");
-                buffer.AppendLine(content.Content);
-            }
-
-            return buffer.ToString();
-        }
-
         private static string TrimToMaxChars(string value, int maxChars)
         {
             if (string.IsNullOrEmpty(value) || value.Length <= maxChars)
@@ -205,5 +504,7 @@ namespace Application.Services
 
             return value[..maxChars];
         }
+
+        #endregion
     }
 }
