@@ -19,6 +19,10 @@ namespace Application.Services
         private readonly IEnrollmentRepository _enrollmentRepository;
         private readonly ICourseRepository _courseRepository;
         private readonly AiService _aiService;
+<<<<<<< HEAD
+=======
+        private readonly AiConversationMemoryService _conversationMemory;
+>>>>>>> e24d4959e9f68da5633d21352029b965ebd66ea0
         private readonly ILogger<AiModuleService> _logger;
 
         public AiModuleService(
@@ -26,12 +30,20 @@ namespace Application.Services
             IEnrollmentRepository enrollmentRepository,
             ICourseRepository courseRepository,
             AiService aiService,
+<<<<<<< HEAD
+=======
+            AiConversationMemoryService conversationMemory,
+>>>>>>> e24d4959e9f68da5633d21352029b965ebd66ea0
             ILogger<AiModuleService> logger)
         {
             _courseModuleRepository = courseModuleRepository;
             _enrollmentRepository = enrollmentRepository;
             _courseRepository = courseRepository;
             _aiService = aiService;
+<<<<<<< HEAD
+=======
+            _conversationMemory = conversationMemory;
+>>>>>>> e24d4959e9f68da5633d21352029b965ebd66ea0
             _logger = logger;
         }
 
@@ -136,7 +148,25 @@ namespace Application.Services
 
             moduleContext = TrimToMaxChars(moduleContext, MaxModuleContextChars);
 
-            var history = request.History ?? new List<AiChatMessageDto>();
+            var conversationId = string.IsNullOrWhiteSpace(request.ConversationId)
+                ? Guid.NewGuid().ToString("N")
+                : request.ConversationId.Trim();
+
+            var incomingHistory = NormalizeHistory(request.History);
+            var conversationKey = BuildConversationKey(moduleId, userId, conversationId);
+
+            List<AiChatMessageDto> history;
+            if (request.UseServerMemory)
+            {
+                var serverHistory = _conversationMemory.GetHistory(conversationKey);
+                history = serverHistory.Concat(incomingHistory).ToList();
+            }
+            else
+            {
+                history = incomingHistory;
+            }
+
+            history = NormalizeHistory(history);
             if (history.Count > MaxHistoryMessages)
             {
                 history = history.Skip(history.Count - MaxHistoryMessages).ToList();
@@ -158,6 +188,7 @@ namespace Application.Services
             try
             {
                 var response = await _aiService.ChatAsync(chatRequest, cancellationToken);
+<<<<<<< HEAD
                 
                 // Validate response
                 if (response == null || string.IsNullOrWhiteSpace(response.Output))
@@ -305,10 +336,65 @@ namespace Application.Services
             foreach (var content in module.ModuleContents)
             {
                 if (string.IsNullOrWhiteSpace(content?.Content))
+=======
+
+                if (request.UseServerMemory)
+                {
+                    var updatedHistory = history
+                        .Append(new AiChatMessageDto { Role = "user", Content = request.Message.Trim() })
+                        .Append(new AiChatMessageDto { Role = "assistant", Content = response.Output })
+                        .ToList();
+
+                    _conversationMemory.SaveHistory(conversationKey, updatedHistory);
+                }
+
+                response.ConversationId = conversationId;
+
+                _logger.LogInformation(
+                    "Module chat success for user {UserId}, module {ModuleId}, conversation {ConversationId}, historyCount {HistoryCount}",
+                    userId,
+                    moduleId,
+                    conversationId,
+                    history.Count);
+
+                return response;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Module chat failed for user {UserId}, module {ModuleId}, conversation {ConversationId}",
+                    userId,
+                    moduleId,
+                    conversationId);
+
+                return new AiTextResponseDto
+                {
+                    Provider = "backend-fallback",
+                    Model = "n/a",
+                    Output = "AI chat is temporarily unavailable. Please try again in a moment. For now, review the module title, description, and the first content section to continue learning.",
+                    ConversationId = conversationId
+                };
+            }
+        }
+
+        private static List<AiChatMessageDto> NormalizeHistory(IEnumerable<AiChatMessageDto>? history)
+        {
+            if (history == null)
+            {
+                return new List<AiChatMessageDto>();
+            }
+
+            var normalized = new List<AiChatMessageDto>();
+            foreach (var message in history)
+            {
+                if (message == null || string.IsNullOrWhiteSpace(message.Content))
+>>>>>>> e24d4959e9f68da5633d21352029b965ebd66ea0
                 {
                     continue;
                 }
 
+<<<<<<< HEAD
                 buffer.AppendLine($"Section: {content.Name}");
                 buffer.AppendLine(content.Content);
             }
@@ -462,6 +548,33 @@ Answer based on the module context:";
         #endregion
 
         #region Helper Methods
+=======
+                var role = NormalizeRole(message.Role);
+                var content = message.Content.Trim();
+                if (content.Length > 4000)
+                {
+                    content = content[..4000];
+                }
+
+                normalized.Add(new AiChatMessageDto
+                {
+                    Role = role,
+                    Content = content
+                });
+            }
+
+            return normalized;
+        }
+
+        private static string NormalizeRole(string? role)
+        {
+            var normalizedRole = role?.Trim().ToLowerInvariant();
+            return normalizedRole == "assistant" ? "assistant" : "user";
+        }
+
+        private static string BuildConversationKey(int moduleId, int userId, string conversationId)
+            => $"module:{moduleId}:user:{userId}:conversation:{conversationId}";
+>>>>>>> e24d4959e9f68da5633d21352029b965ebd66ea0
 
         private async Task<CourseModule> GetAuthorizedModuleAsync(int moduleId, int userId, string role)
         {

@@ -36,6 +36,15 @@ namespace API.Controllers
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new { status = "unavailable" });
         }
 
+        [HttpGet("monitoring")]
+        [Authorize(Roles = "Instructor")]
+        [ProducesResponseType(typeof(Dictionary<string, AiMonitoringService.AiMonitoringSnapshot>), StatusCodes.Status200OK)]
+        public IActionResult Monitoring()
+        {
+            var snapshot = _aiService.GetMonitoringSnapshot();
+            return Ok(snapshot);
+        }
+
         [HttpPost("chat")]
         [ProducesResponseType(typeof(AiTextResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]

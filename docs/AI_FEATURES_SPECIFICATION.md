@@ -56,11 +56,17 @@ Deliver practical AI features inside MiniCoursera that are:
 
 - Uses module context + limited recent chat history.
 - Applies prompt-size controls to keep responses stable.
+- Supports server-side conversation memory via `conversationId`.
+- Normalizes conversation history (role/content formatting) before AI calls.
 - Returns graceful fallback if the AI provider is unavailable.
 
 **Endpoint**
 
 - `POST /api/ai/modules/{moduleId}/chat`
+
+**Operational support**
+
+- `GET /api/ai/monitoring` (Instructor) provides call/error/latency snapshots for AI endpoints.
 
 ---
 
@@ -110,6 +116,11 @@ Frontend -> Backend (.NET API) -> AI Microservice (FastAPI/Python) -> LLM Provid
 ### Resilience checks
 
 - When AI provider was unavailable, module chat returned a controlled fallback response.
+
+### Orchestration and observability checks
+
+- Build passed after adding server-side memory + history normalization.
+- Build passed after adding structured logging + monitoring service.
 
 ---
 

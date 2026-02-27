@@ -5,5 +5,6 @@ namespace Application.DTOs.AI
         public string Output { get; set; } = string.Empty;
         public string Provider { get; set; } = string.Empty;
         public string Model { get; set; } = string.Empty;
+        public string? ConversationId { get; set; }
     }
 }

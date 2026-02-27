@@ -319,6 +319,69 @@ Conclusion: Stage B is fully validated end-to-end.
 5. Backend sends grounded prompt to AI service.
 6. If AI provider is unavailable, backend returns graceful fallback response (`provider=backend-fallback`).
 
+## Stage C.5 status (implemented) - Chat orchestration hardening
+
+### What was improved
+
+- Added **server-side conversation memory** in backend:
+  - `Application/Services/AiConversationMemoryService.cs`
+- Extended module chat request/response contract:
+  - `AiModuleChatRequestDto`: `conversationId`, `useServerMemory`
+  - `AiTextResponseDto`: `conversationId`
+- Improved history handling in module chat orchestration:
+  - role normalization (`user`/`assistant`)
+  - trimming and filtering of invalid/empty history messages
+  - safe cap before forwarding to AI provider
+- Added structured logging and lightweight monitoring metrics:
+  - `Application/Services/AiMonitoringService.cs`
+  - logging in `AiService` and `AiModuleService`
+- Added monitoring API endpoint:
+  - `GET /api/ai/monitoring` (Instructor only)
+
+### Plain-language behavior
+
+1. Frontend can send a `conversationId` to continue the same thread.
+2. Backend can store recent conversation turns (per module + user + conversation).
+3. Backend normalizes history so malformed messages do not break prompt quality.
+4. Backend logs each AI request with endpoint, duration, and result.
+5. Backend tracks success/failure counts and latency snapshots per AI endpoint.
+
+### Example module chat request with memory
+
+```json
+{
+  "message": "Can you explain this section with a simple example?",
+  "conversationId": "module1-sessionA",
+  "useServerMemory": true,
+  "language": "en",
+  "history": []
+}
+```
+
+### Monitoring endpoint response shape (example)
+
+```json
+{
+  "chat": {
+    "totalCalls": 14,
+    "successCalls": 12,
+    "failedCalls": 2,
+    "errorRatePercent": 14.29,
+    "lastDurationMs": 412,
+    "averageDurationMs": 365.43
+  }
+}
+```
+
+### Stage C.5 tests executed
+
+- Build verification after memory/history changes:
+  - `dotnet build Backend.sln` (success)
+- Build verification after logging/monitoring changes:
+  - `dotnet build Backend.sln` (success)
+
+Conclusion: chat orchestration hardening is implemented and compile-validated.
+
 ### Stage C tests executed
 
 - Unauthorized test:
