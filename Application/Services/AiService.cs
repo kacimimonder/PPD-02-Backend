@@ -39,6 +39,74 @@ namespace Application.Services
         public Task<AiTextResponseDto> GenerateQuizAsync(AiQuizRequestDto request, CancellationToken cancellationToken = default)
             => PostAsync<AiQuizRequestDto>("quiz", request, _settings.QuizTimeoutSeconds, cancellationToken);
 
+        public async Task<AiSentimentResponseDto> AnalyzeSentimentAsync(AiSentimentRequestDto request, CancellationToken cancellationToken = default)
+        {
+            var fallback = new AiSentimentResponseDto
+            {
+                Sentiment = "neutral",
+                Confidence = 0,
+                Rationale = "Fallback: sentiment service unavailable.",
+                Provider = "backend-fallback",
+                Model = "n/a"
+            };
+
+            try
+            {
+                var response = await PostSignalAsync<AiSentimentRequestDto, AiSentimentResponseDto>(
+                    "sentiment", request, _settings.ChatTimeoutSeconds, cancellationToken);
+
+                if (!IsValidSentiment(response.Sentiment))
+                {
+                    response.Sentiment = "neutral";
+                    response.Rationale = string.IsNullOrWhiteSpace(response.Rationale)
+                        ? "Fallback: unknown sentiment label was normalized."
+                        : response.Rationale;
+                }
+
+                response.Confidence = NormalizeConfidence(response.Confidence);
+                return response;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Sentiment analysis failed. Returning fallback result.");
+                return fallback;
+            }
+        }
+
+        public async Task<AiEmotionResponseDto> AnalyzeEmotionAsync(AiEmotionRequestDto request, CancellationToken cancellationToken = default)
+        {
+            var fallback = new AiEmotionResponseDto
+            {
+                Emotion = "neutral",
+                Confidence = 0,
+                Rationale = "Fallback: emotion service unavailable.",
+                Provider = "backend-fallback",
+                Model = "n/a"
+            };
+
+            try
+            {
+                var response = await PostSignalAsync<AiEmotionRequestDto, AiEmotionResponseDto>(
+                    "emotion", request, _settings.ChatTimeoutSeconds, cancellationToken);
+
+                if (!IsValidEmotion(response.Emotion))
+                {
+                    response.Emotion = "neutral";
+                    response.Rationale = string.IsNullOrWhiteSpace(response.Rationale)
+                        ? "Fallback: unknown emotion label was normalized."
+                        : response.Rationale;
+                }
+
+                response.Confidence = NormalizeConfidence(response.Confidence);
+                return response;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Emotion analysis failed. Returning fallback result.");
+                return fallback;
+            }
+        }
+
         public async Task<bool> IsHealthyAsync(CancellationToken cancellationToken = default)
         {
             var stopwatch = Stopwatch.StartNew();
@@ -184,5 +252,72 @@ namespace Application.Services
 
         public Dictionary<string, AiMonitoringService.AiMonitoringSnapshot> GetMonitoringSnapshot()
             => _monitoringService.GetSnapshot();
+
+        private async Task<TResponse> PostSignalAsync<TRequest, TResponse>(
+            string endpoint,
+            TRequest request,
+            int timeoutSeconds,
+            CancellationToken cancellationToken)
+            where TResponse : class, new()
+        {
+            var stopwatch = Stopwatch.StartNew();
+            _logger.LogInformation(
+                "AI signal request started. Endpoint={Endpoint}, RequestType={RequestType}, TimeoutSec={Timeout}",
+                endpoint,
+                typeof(TRequest).Name,
+                timeoutSeconds);
+
+            var json = JsonSerializer.Serialize(request, JsonOptions);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+
+            using var response = await _httpClient.PostAsync(endpoint, content, cts.Token);
+            var body = await response.Content.ReadAsStringAsync(cts.Token);
+            stopwatch.Stop();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _monitoringService.Record(endpoint, false, stopwatch.ElapsedMilliseconds);
+                throw new InvalidOperationException($"AI service error ({(int)response.StatusCode}).");
+            }
+
+            var parsed = JsonSerializer.Deserialize<TResponse>(body, JsonOptions);
+            if (parsed == null)
+            {
+                _monitoringService.Record(endpoint, false, stopwatch.ElapsedMilliseconds);
+                throw new InvalidOperationException("AI service returned an empty/invalid response.");
+            }
+
+            _monitoringService.Record(endpoint, true, stopwatch.ElapsedMilliseconds);
+            return parsed;
+        }
+
+        private static double NormalizeConfidence(double confidence)
+        {
+            if (double.IsNaN(confidence) || double.IsInfinity(confidence))
+            {
+                return 0;
+            }
+
+            if (confidence < 0)
+            {
+                return 0;
+            }
+
+            if (confidence > 1)
+            {
+                return 1;
+            }
+
+            return confidence;
+        }
+
+        private static bool IsValidSentiment(string sentiment)
+            => sentiment is "positive" or "negative" or "neutral";
+
+        private static bool IsValidEmotion(string emotion)
+            => emotion is "confused" or "frustrated" or "engaged" or "confident" or "neutral";
     }
 }

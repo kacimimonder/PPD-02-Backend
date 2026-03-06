@@ -89,6 +89,34 @@ class QuizRequest(BaseModel):
         return v
 
 
+class SentimentRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+    language: str = Field(default="en", min_length=2, max_length=8)
+    module_id: Optional[int] = Field(default=None)
+
+
+class SentimentResponse(BaseModel):
+    sentiment: str
+    confidence: float
+    rationale: str
+    provider: str
+    model: str
+
+
+class EmotionRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+    language: str = Field(default="en", min_length=2, max_length=8)
+    module_id: Optional[int] = Field(default=None)
+
+
+class EmotionResponse(BaseModel):
+    emotion: str
+    confidence: float
+    rationale: str
+    provider: str
+    model: str
+
+
 class AiTextResponse(BaseModel):
     output: str
     provider: str
@@ -223,6 +251,61 @@ def _fake_response(prompt: str, endpoint: str) -> str:
     }
     
     return responses.get(endpoint, f"[FAKE_MODE] Endpoint: {endpoint}")
+
+
+def _infer_sentiment_from_text(message: str) -> tuple[str, float, str]:
+    lower = (message or "").lower()
+    negative_hints = ["confused", "frustrated", "stuck", "lost", "hard", "can't", "cannot", "difficult"]
+    positive_hints = ["great", "clear", "understand", "easy", "good", "thanks", "helpful", "got it"]
+
+    if any(hint in lower for hint in negative_hints):
+        return ("negative", 0.82, "Detected frustration/confusion cues in the message.")
+    if any(hint in lower for hint in positive_hints):
+        return ("positive", 0.78, "Detected confidence/positive cues in the message.")
+    return ("neutral", 0.62, "No strong positive or negative sentiment cues were detected.")
+
+
+def _build_sentiment_prompt(request: SentimentRequest) -> str:
+    return f"""You are a sentiment classifier for an educational platform.
+Classify the student's message sentiment.
+
+Allowed labels: positive, neutral, negative.
+Return ONLY valid JSON with fields:
+- sentiment (string)
+- confidence (number from 0 to 1)
+- rationale (short string)
+
+Language code: {request.language}
+Message: {request.message}
+"""
+
+
+def _infer_emotion_from_text(message: str) -> tuple[str, float, str]:
+    lower = (message or "").lower()
+    if any(h in lower for h in ["confused", "don't understand", "unclear", "lost", "what does", "how does"]):
+        return ("confused", 0.84, "Detected confusion cues in the text.")
+    if any(h in lower for h in ["frustrated", "annoyed", "stuck", "this is hard", "can't solve"]):
+        return ("frustrated", 0.81, "Detected frustration cues in the text.")
+    if any(h in lower for h in ["interesting", "tell me more", "curious", "can we go deeper"]):
+        return ("engaged", 0.76, "Detected active engagement cues in the text.")
+    if any(h in lower for h in ["i understand", "got it", "makes sense", "easy now"]):
+        return ("confident", 0.77, "Detected confidence cues in the text.")
+    return ("neutral", 0.63, "No strong emotional cues were detected.")
+
+
+def _build_emotion_prompt(request: EmotionRequest) -> str:
+    return f"""You are an emotion classifier for educational chat messages.
+Classify the student's dominant emotion.
+
+Allowed labels: confused, frustrated, engaged, confident, neutral.
+Return ONLY valid JSON with fields:
+- emotion (string)
+- confidence (number from 0 to 1)
+- rationale (short string)
+
+Language code: {request.language}
+Message: {request.message}
+"""
 
 
 def _generate(prompt: str, endpoint: str = "chat") -> AiTextResponse:
@@ -477,6 +560,144 @@ def quiz(request: QuizRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Quiz processing error: {str(e)}")
+
+
+@app.post("/sentiment", response_model=SentimentResponse)
+def sentiment(request: SentimentRequest):
+    if FAKE_MODE:
+        label, confidence, rationale = _infer_sentiment_from_text(request.message)
+        return SentimentResponse(
+            sentiment=label,
+            confidence=confidence,
+            rationale=rationale,
+            provider="fake",
+            model="local-test",
+        )
+
+    try:
+        prompt = _build_sentiment_prompt(request)
+        generated = _generate(prompt, "chat")
+
+        parsed = None
+        try:
+            parsed = json.loads(generated.output)
+        except Exception:
+            match = re.search(r"\{[\s\S]*\}", generated.output)
+            if match:
+                parsed = json.loads(match.group(0))
+
+        if not isinstance(parsed, dict):
+            label, confidence, rationale = _infer_sentiment_from_text(request.message)
+            return SentimentResponse(
+                sentiment=label,
+                confidence=confidence,
+                rationale="Fallback parser used because provider output was not valid JSON.",
+                provider=generated.provider,
+                model=generated.model,
+            )
+
+        sentiment_label = str(parsed.get("sentiment", "neutral")).lower().strip()
+        if sentiment_label not in {"positive", "neutral", "negative"}:
+            sentiment_label = "neutral"
+
+        confidence = parsed.get("confidence", 0.0)
+        try:
+            confidence = float(confidence)
+        except Exception:
+            confidence = 0.0
+        confidence = max(0.0, min(1.0, confidence))
+
+        rationale = str(parsed.get("rationale", "Sentiment analyzed from user text.")).strip()
+        if not rationale:
+            rationale = "Sentiment analyzed from user text."
+
+        return SentimentResponse(
+            sentiment=sentiment_label,
+            confidence=confidence,
+            rationale=rationale,
+            provider=generated.provider,
+            model=generated.model,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        label, confidence, rationale = _infer_sentiment_from_text(request.message)
+        return SentimentResponse(
+            sentiment=label,
+            confidence=confidence,
+            rationale=f"Fallback classification used due to processing error: {str(e)}",
+            provider="fallback",
+            model="rules",
+        )
+
+
+@app.post("/emotion", response_model=EmotionResponse)
+def emotion(request: EmotionRequest):
+    if FAKE_MODE:
+        label, confidence, rationale = _infer_emotion_from_text(request.message)
+        return EmotionResponse(
+            emotion=label,
+            confidence=confidence,
+            rationale=rationale,
+            provider="fake",
+            model="local-test",
+        )
+
+    try:
+        prompt = _build_emotion_prompt(request)
+        generated = _generate(prompt, "chat")
+
+        parsed = None
+        try:
+            parsed = json.loads(generated.output)
+        except Exception:
+            match = re.search(r"\{[\s\S]*\}", generated.output)
+            if match:
+                parsed = json.loads(match.group(0))
+
+        if not isinstance(parsed, dict):
+            label, confidence, rationale = _infer_emotion_from_text(request.message)
+            return EmotionResponse(
+                emotion=label,
+                confidence=confidence,
+                rationale="Fallback parser used because provider output was not valid JSON.",
+                provider=generated.provider,
+                model=generated.model,
+            )
+
+        emotion_label = str(parsed.get("emotion", "neutral")).lower().strip()
+        if emotion_label not in {"confused", "frustrated", "engaged", "confident", "neutral"}:
+            emotion_label = "neutral"
+
+        confidence = parsed.get("confidence", 0.0)
+        try:
+            confidence = float(confidence)
+        except Exception:
+            confidence = 0.0
+        confidence = max(0.0, min(1.0, confidence))
+
+        rationale = str(parsed.get("rationale", "Emotion analyzed from user text.")).strip()
+        if not rationale:
+            rationale = "Emotion analyzed from user text."
+
+        return EmotionResponse(
+            emotion=emotion_label,
+            confidence=confidence,
+            rationale=rationale,
+            provider=generated.provider,
+            model=generated.model,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        label, confidence, rationale = _infer_emotion_from_text(request.message)
+        return EmotionResponse(
+            emotion=label,
+            confidence=confidence,
+            rationale=f"Fallback classification used due to processing error: {str(e)}",
+            provider="fallback",
+            model="rules",
+        )
 
 
 if __name__ == "__main__":

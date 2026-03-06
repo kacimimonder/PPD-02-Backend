@@ -115,6 +115,34 @@ namespace API.Controllers
             }
         }
 
+        [HttpPost("sentiment")]
+        [ProducesResponseType(typeof(AiSentimentResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> Sentiment([FromBody] AiSentimentRequestDto request, CancellationToken cancellationToken)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(CreateValidationError(ModelState));
+            }
+
+            var response = await _aiService.AnalyzeSentimentAsync(request, cancellationToken);
+            return Ok(response);
+        }
+
+        [HttpPost("emotion")]
+        [ProducesResponseType(typeof(AiEmotionResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> Emotion([FromBody] AiEmotionRequestDto request, CancellationToken cancellationToken)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(CreateValidationError(ModelState));
+            }
+
+            var response = await _aiService.AnalyzeEmotionAsync(request, cancellationToken);
+            return Ok(response);
+        }
+
         [HttpPost("modules/{moduleId:int}/summary")]
         [ProducesResponseType(typeof(AiTextResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]

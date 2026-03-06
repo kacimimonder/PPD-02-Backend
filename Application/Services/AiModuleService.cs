@@ -182,7 +182,28 @@ namespace Application.Services
                 history = history.Skip(history.Count - MaxHistoryMessages).ToList();
             }
 
+            var sentiment = await _aiService.AnalyzeSentimentAsync(new AiSentimentRequestDto
+            {
+                Message = request.Message,
+                Language = request.Language,
+                ModuleId = moduleId
+            }, cancellationToken);
+
+            var emotion = await _aiService.AnalyzeEmotionAsync(new AiEmotionRequestDto
+            {
+                Message = request.Message,
+                Language = request.Language,
+                ModuleId = moduleId
+            }, cancellationToken);
+
+            var adaptationInstruction = BuildAdaptationInstruction(sentiment.Sentiment, emotion.Emotion);
+            var adaptationApplied = !string.IsNullOrWhiteSpace(adaptationInstruction);
+
             var systemPrompt = BuildGroundedChatSystemPrompt(module, request.Language);
+            if (adaptationApplied)
+            {
+                systemPrompt += "\n\n## Adaptive response mode:\n" + adaptationInstruction;
+            }
             var userMessage = BuildGroundedChatUserMessage(moduleContext, request.Message);
 
             var chatRequest = new AiChatRequestDto
@@ -220,6 +241,9 @@ namespace Application.Services
 
                 response.ConversationId = conversationId;
                 response.DurationMs = stopwatch.ElapsedMilliseconds;
+                response.Sentiment = sentiment.Sentiment;
+                response.Emotion = emotion.Emotion;
+                response.AdaptationApplied = adaptationApplied;
 
                 _logger.LogInformation(
                     "Module chat success for user {UserId}, module {ModuleId}, conversation {ConversationId}, historyCount {HistoryCount}, durationMs {DurationMs}",
@@ -237,6 +261,9 @@ namespace Application.Services
                 var fallback = CreateGroundedFallbackResponse(module);
                 fallback.ConversationId = conversationId;
                 fallback.DurationMs = stopwatch.ElapsedMilliseconds;
+                fallback.Sentiment = sentiment.Sentiment;
+                fallback.Emotion = emotion.Emotion;
+                fallback.AdaptationApplied = adaptationApplied;
                 return fallback;
             }
         }
@@ -514,6 +541,24 @@ Provide a helpful, grounded answer:";
                 "ru" => "Russian",
                 _ => "English"
             };
+        }
+
+        private static string BuildAdaptationInstruction(string sentiment, string emotion)
+        {
+            var s = (sentiment ?? "neutral").ToLowerInvariant();
+            var e = (emotion ?? "neutral").ToLowerInvariant();
+
+            if (e is "confused" or "frustrated" || s == "negative")
+            {
+                return "Use a simpler tone, explain in short steps, and include one concrete example. End with a quick check question to confirm understanding.";
+            }
+
+            if (e is "engaged" or "confident" || s == "positive")
+            {
+                return "Provide an optional advanced explanation after the core answer and suggest one deeper follow-up concept.";
+            }
+
+            return string.Empty;
         }
 
         #endregion

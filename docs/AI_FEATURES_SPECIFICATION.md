@@ -59,6 +59,10 @@ Deliver practical AI features inside MiniCoursera that are:
 - Supports server-side conversation memory via `conversationId`.
 - Normalizes conversation history (role/content formatting) before AI calls.
 - Returns graceful fallback if the AI provider is unavailable.
+- Adds adaptive tutoring behavior from text signals:
+  - negative/confused/frustrated -> simpler step-by-step guidance
+  - positive/engaged/confident -> optional advanced follow-up depth
+- Returns chat metadata fields: `sentiment`, `emotion`, `adaptationApplied`.
 
 **Endpoint**
 
@@ -67,6 +71,43 @@ Deliver practical AI features inside MiniCoursera that are:
 **Operational support**
 
 - `GET /api/ai/monitoring` (Instructor) provides call/error/latency snapshots for AI endpoints.
+
+---
+
+### F4. Sentiment Analysis (Text)
+
+**User value**
+
+- Detects learner tone from message text so tutoring can adapt.
+
+**Behavior**
+
+- Classifies sentiment as `positive`, `neutral`, or `negative`.
+- Returns confidence and rationale.
+- Uses backend fallback if provider output is unavailable/invalid.
+
+**Endpoint**
+
+- `POST /api/ai/sentiment`
+
+---
+
+### F5. Emotion Recognition (Text-only)
+
+**User value**
+
+- Detects learning emotion signals without webcam/privacy complexity.
+
+**Behavior**
+
+- Classifies emotion as one of:
+  - `confused`, `frustrated`, `engaged`, `confident`, `neutral`
+- Returns confidence and rationale.
+- Uses fallback normalization to `neutral` on invalid provider output.
+
+**Endpoint**
+
+- `POST /api/ai/emotion`
 
 ---
 
@@ -121,6 +162,18 @@ Frontend -> Backend (.NET API) -> AI Microservice (FastAPI/Python) -> LLM Provid
 
 - Build passed after adding server-side memory + history normalization.
 - Build passed after adding structured logging + monitoring service.
+
+### Sentiment/emotion checks (S1-S4)
+
+- Unit-style contract test passed:
+  - `scripts/unit_sentiment_emotion_contract_test.ps1`
+  - evidence: `scripts/unit_sentiment_emotion_contract_result_1772809029.txt`
+- Integration API test passed:
+  - `scripts/integration_sentiment_emotion_api_test.ps1`
+  - evidence: `scripts/integration_sentiment_emotion_result_1772809031.txt`
+- Full end-to-end test passed:
+  - `scripts/e2e_sentiment_emotion_test.ps1`
+  - evidence: `scripts/e2e_sentiment_emotion_result_1772808973.txt`
 
 ---
 

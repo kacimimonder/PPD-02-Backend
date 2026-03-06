@@ -196,6 +196,8 @@ If all three return `200` with `provider: "gemini"`, the AI API is working in no
 - `POST /api/ai/chat` (requires auth)
 - `POST /api/ai/summary` (requires auth)
 - `POST /api/ai/quiz` (requires auth)
+- `POST /api/ai/sentiment` (requires auth)
+- `POST /api/ai/emotion` (requires auth)
 
 ### Example chat request body
 
@@ -214,6 +216,40 @@ If all three return `200` with `provider: "gemini"`, the AI API is working in no
   "output": "...",
   "provider": "gemini",
   "model": "gemini-2.5-flash"
+}
+```
+
+### Example sentiment request body
+
+```json
+{
+  "message": "I am confused and frustrated with this topic",
+  "language": "en",
+  "moduleId": 7
+}
+```
+
+### Example sentiment response shape
+
+```json
+{
+  "sentiment": "negative",
+  "confidence": 0.82,
+  "rationale": "Detected frustration/confusion cues in the message.",
+  "provider": "fake",
+  "model": "local-test"
+}
+```
+
+### Example emotion response shape
+
+```json
+{
+  "emotion": "confused",
+  "confidence": 0.84,
+  "rationale": "Detected confusion cues in the text.",
+  "provider": "fake",
+  "model": "local-test"
 }
 ```
 
@@ -381,6 +417,63 @@ Conclusion: Stage B is fully validated end-to-end.
   - `dotnet build Backend.sln` (success)
 
 Conclusion: chat orchestration hardening is implemented and compile-validated.
+
+## Stage S1-S3 status (implemented) - Sentiment, Emotion, and Adaptive Chat
+
+### What was built
+
+- Added sentiment analysis endpoint:
+  - `POST /api/ai/sentiment`
+  - backend DTOs/service wiring in `Application/DTOs/AI/` and `Application/Services/AiService.cs`
+  - Python endpoint in `Application/Services/aiService/chatbot.py`
+- Added emotion analysis endpoint:
+  - `POST /api/ai/emotion`
+  - backend DTOs/service wiring in `Application/DTOs/AI/` and `Application/Services/AiService.cs`
+  - Python endpoint in `Application/Services/aiService/chatbot.py`
+- Added adaptive module chat integration:
+  - `Application/Services/AiModuleService.cs`
+  - chat now analyzes text sentiment + emotion before generating final answer
+  - chat response now includes:
+    - `sentiment`
+    - `emotion`
+    - `adaptationApplied`
+
+### Adaptation rules
+
+- If sentiment/emotion indicates negative state (`negative`, `confused`, `frustrated`):
+  - simpler tone
+  - short step-by-step explanation
+  - concrete example
+- If positive/engaged state (`positive`, `engaged`, `confident`):
+  - optional advanced follow-up concept
+
+## Stage S4 validation (implemented)
+
+### Unit-style contract checks
+
+- Script: `scripts/unit_sentiment_emotion_contract_test.ps1`
+- Evidence: `scripts/unit_sentiment_emotion_contract_result_1772809029.txt`
+- Verified:
+  - sentiment labels are constrained to `positive|neutral|negative`
+  - emotion labels are constrained to `confused|frustrated|engaged|confident|neutral`
+  - confidence values remain in `[0,1]`
+
+### Integration checks
+
+- Script: `scripts/integration_sentiment_emotion_api_test.ps1`
+- Evidence: `scripts/integration_sentiment_emotion_result_1772809031.txt`
+- Verified:
+  - authenticated access to `/api/ai/sentiment` and `/api/ai/emotion`
+  - monitoring counters include sentiment/emotion calls
+
+### End-to-end checks
+
+- Script: `scripts/e2e_sentiment_emotion_test.ps1`
+- Evidence: `scripts/e2e_sentiment_emotion_result_1772808973.txt`
+- Verified:
+  - full flow (user/login/course/module/content)
+  - sentiment and emotion endpoints return successful classifications
+  - module chat returns adaptive metadata and `adaptationApplied=true`
 
 ### Stage C tests executed
 

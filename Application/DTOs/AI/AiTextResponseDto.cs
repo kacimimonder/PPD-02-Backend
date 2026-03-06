@@ -21,5 +21,9 @@ namespace Application.DTOs.AI
         /// User-friendly status hint: "success", "fallback", "partial"
         /// </summary>
         public string Status { get; set; } = "success";
+
+        public string? Sentiment { get; set; }
+        public string? Emotion { get; set; }
+        public bool AdaptationApplied { get; set; }
     }
 }
