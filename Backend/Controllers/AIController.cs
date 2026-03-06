@@ -30,10 +30,14 @@ namespace API.Controllers
             var isHealthy = await _aiService.IsHealthyAsync(cancellationToken);
             if (isHealthy)
             {
-                return Ok(new { status = "ok" });
+                return Ok(new { status = "ok", message = "AI service is operational." });
             }
 
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { status = "unavailable" });
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                status = "unavailable",
+                message = "The AI service is currently unavailable. Features like quiz generation, summaries, and chat will use fallback responses until the service is restored."
+            });
         }
 
         [HttpGet("monitoring")]
@@ -53,7 +57,7 @@ namespace API.Controllers
         {
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                return BadRequest(CreateValidationError(ModelState));
             }
 
             try
@@ -63,7 +67,7 @@ namespace API.Controllers
             }
             catch (InvalidOperationException ex)
             {
-                return StatusCode(StatusCodes.Status502BadGateway, ex.Message);
+                return StatusCode(StatusCodes.Status502BadGateway, CreateErrorResponse("ai_unavailable", ex.Message));
             }
         }
 
@@ -75,7 +79,7 @@ namespace API.Controllers
         {
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                return BadRequest(CreateValidationError(ModelState));
             }
 
             try
@@ -85,7 +89,7 @@ namespace API.Controllers
             }
             catch (InvalidOperationException ex)
             {
-                return StatusCode(StatusCodes.Status502BadGateway, ex.Message);
+                return StatusCode(StatusCodes.Status502BadGateway, CreateErrorResponse("ai_unavailable", ex.Message));
             }
         }
 
@@ -97,7 +101,7 @@ namespace API.Controllers
         {
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                return BadRequest(CreateValidationError(ModelState));
             }
 
             try
@@ -107,7 +111,7 @@ namespace API.Controllers
             }
             catch (InvalidOperationException ex)
             {
-                return StatusCode(StatusCodes.Status502BadGateway, ex.Message);
+                return StatusCode(StatusCodes.Status502BadGateway, CreateErrorResponse("ai_unavailable", ex.Message));
             }
         }
 
@@ -130,7 +134,7 @@ namespace API.Controllers
             var req = request ?? new AiModuleSummaryRequestDto();
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                return BadRequest(CreateValidationError(ModelState));
             }
 
             try
@@ -140,19 +144,19 @@ namespace API.Controllers
             }
             catch (BadRequestException ex)
             {
-                return BadRequest(ex.Message);
+                return BadRequest(CreateErrorResponse("validation_error", ex.Message));
             }
             catch (ForbiddenException ex)
             {
-                return StatusCode(StatusCodes.Status403Forbidden, ex.Message);
+                return StatusCode(StatusCodes.Status403Forbidden, CreateErrorResponse("access_denied", ex.Message));
             }
             catch (NotFoundException ex)
             {
-                return NotFound(ex.Message);
+                return NotFound(CreateErrorResponse("not_found", ex.Message));
             }
             catch (InvalidOperationException ex)
             {
-                return StatusCode(StatusCodes.Status502BadGateway, ex.Message);
+                return StatusCode(StatusCodes.Status502BadGateway, CreateErrorResponse("ai_unavailable", ex.Message));
             }
         }
 
@@ -175,7 +179,7 @@ namespace API.Controllers
             var req = request ?? new AiModuleQuizRequestDto();
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                return BadRequest(CreateValidationError(ModelState));
             }
 
             try
@@ -185,19 +189,19 @@ namespace API.Controllers
             }
             catch (BadRequestException ex)
             {
-                return BadRequest(ex.Message);
+                return BadRequest(CreateErrorResponse("validation_error", ex.Message));
             }
             catch (ForbiddenException ex)
             {
-                return StatusCode(StatusCodes.Status403Forbidden, ex.Message);
+                return StatusCode(StatusCodes.Status403Forbidden, CreateErrorResponse("access_denied", ex.Message));
             }
             catch (NotFoundException ex)
             {
-                return NotFound(ex.Message);
+                return NotFound(CreateErrorResponse("not_found", ex.Message));
             }
             catch (InvalidOperationException ex)
             {
-                return StatusCode(StatusCodes.Status502BadGateway, ex.Message);
+                return StatusCode(StatusCodes.Status502BadGateway, CreateErrorResponse("ai_unavailable", ex.Message));
             }
         }
 
@@ -219,7 +223,7 @@ namespace API.Controllers
 
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                return BadRequest(CreateValidationError(ModelState));
             }
 
             try
@@ -229,25 +233,26 @@ namespace API.Controllers
             }
             catch (BadRequestException ex)
             {
-                return BadRequest(ex.Message);
+                return BadRequest(CreateErrorResponse("validation_error", ex.Message));
             }
             catch (ForbiddenException ex)
             {
-                return StatusCode(StatusCodes.Status403Forbidden, ex.Message);
+                return StatusCode(StatusCodes.Status403Forbidden, CreateErrorResponse("access_denied", ex.Message));
             }
             catch (NotFoundException ex)
             {
-                return NotFound(ex.Message);
+                return NotFound(CreateErrorResponse("not_found", ex.Message));
             }
             catch (InvalidOperationException ex)
             {
-                return StatusCode(StatusCodes.Status502BadGateway, ex.Message);
+                return StatusCode(StatusCodes.Status502BadGateway, CreateErrorResponse("ai_unavailable", ex.Message));
             }
         }
 
         private bool TryGetCurrentUser(out int userId, out string role, out IActionResult unauthorizedResult)
         {
-            unauthorizedResult = Unauthorized("Missing or invalid auth claims.");
+            unauthorizedResult = Unauthorized(CreateErrorResponse("auth_error",
+                "Your session has expired or is invalid. Please sign in again to use AI features."));
             userId = 0;
             role = string.Empty;
 
@@ -260,6 +265,27 @@ namespace API.Controllers
             }
 
             return true;
+        }
+
+        private static object CreateErrorResponse(string code, string message)
+        {
+            return new { error = code, message };
+        }
+
+        private static object CreateValidationError(Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary modelState)
+        {
+            var errors = modelState
+                .Where(e => e.Value?.Errors.Count > 0)
+                .ToDictionary(
+                    e => e.Key,
+                    e => e.Value!.Errors.Select(err => err.ErrorMessage).ToArray());
+
+            return new
+            {
+                error = "validation_error",
+                message = "Please check your input and try again.",
+                details = errors
+            };
         }
     }
 }

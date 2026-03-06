@@ -1,0 +1,66 @@
+[14:49:51] ============================================================
+[14:49:51]   AI LOAD & PERFORMANCE TEST SUITE
+[14:49:51]   Base URL: http://localhost:5194
+[14:49:51]   Concurrent Users: 3
+[14:49:51]   Requests Per User: 2
+[14:49:51]   Total Planned Requests: 6 per endpoint
+[14:49:51]   Started: 2026-03-06 14:49:51
+[14:49:51] ============================================================
+[14:49:51] 
+[14:49:51] --- PHASE 1: Health Check ---
+[14:50:01] Health check FAILED (The remote server returned an error: (503) Server Unavailable.). AI service may be down - tests will measure fallback behavior.
+[14:50:01] 
+[14:50:01] --- PHASE 2: Authentication ---
+[14:50:01] Student login failed: The remote server returned an error: (404) Not Found.
+[14:50:01] Attempting to register student via curl...
+[14:50:01] Student registration status: 200
+[14:50:02] Student login OK after registration
+[14:50:03] Instructor login failed - registering...
+[14:50:04] Instructor login OK after registration
+[14:50:04] 
+[14:50:04] --- PHASE 3: Discover Test Module ---
+[14:50:04] 
+[14:50:04] --- PHASE 4: Health Endpoint Load Test (6 requests) ---
+[14:51:04] 
+[14:51:04] ========== HEALTH ENDPOINT ==========
+[14:51:04]   Total Requests:    6
+[14:51:04]   Successful:        0
+[14:51:04]   Failed:            6
+[14:51:04]   Error Rate:        100%
+[14:51:04]   Avg Duration:      10006.33ms
+[14:51:04]   Min Duration:      10002ms
+[14:51:04]   Max Duration:      10012ms
+[14:51:04]   P95 Duration:      10012ms
+[14:51:04]   P99 Duration:      10012ms
+[14:51:04]   Error Details:
+[14:51:04]     - Status 503: The remote server returned an error: (503) Server Unavailable.
+[14:51:04]     - Status 503: The remote server returned an error: (503) Server Unavailable.
+[14:51:04]     - Status 503: The remote server returned an error: (503) Server Unavailable.
+[14:51:04]     - Status 503: The remote server returned an error: (503) Server Unavailable.
+[14:51:04]     - Status 503: The remote server returned an error: (503) Server Unavailable.
+[14:51:04]     - Status 503: The remote server returned an error: (503) Server Unavailable.
+[14:51:04] Skipping quiz load test (no module found)
+[14:51:04] 
+[14:51:04] --- PHASE 8: Error Handling & Fallback Tests ---
+[14:51:04]   Invalid module ID -> Status 404 (expected 404) PASS
+[14:51:04]   No auth token -> Status 401 (expected 401) PASS
+[14:51:04]   Tests 3-6 skipped (no module found)
+[14:51:04] 
+[14:51:04]   Error handling tests: 2 / 2 passed
+[14:51:04] 
+[14:51:04] --- PHASE 9: Monitoring Snapshot ---
+[14:51:04]   Monitoring data retrieved successfully
+[14:51:04]   [health] calls=7 success=0 failed=7 errRate=100% avg=10003.29ms p95=10010ms p99=10010ms
+[14:51:04] 
+[14:51:04] ============================================================
+[14:51:04]   FINAL PERFORMANCE SUMMARY
+[14:51:04] ============================================================
+[14:51:04] 
+[14:51:04] Endpoint                          Total       OK     Fail    Avg(ms)    P95(ms)    P99(ms)    ErrRate
+[14:51:04] --------                          -----       --     ----    -------    -------    -------    -------
+[14:51:04] HEALTH ENDPOINT                       6        0        6   10006.33      10012      10012       100%
+[14:51:04] 
+[14:51:04] Error Handling: 2 / 2 tests passed
+[14:51:04] Results saved to: C:\Users\akram\Desktop\PPD-02-Backend\scripts\ai_load_test_result_20260306_144951.txt
+[14:51:04] Completed: 2026-03-06 14:51:04
+[14:51:04] ============================================================

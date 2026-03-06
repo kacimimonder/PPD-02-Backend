@@ -1,0 +1,18 @@
+[14:33:41] ============================================================
+[14:33:41]   AI LOAD & PERFORMANCE TEST SUITE
+[14:33:41]   Base URL: http://localhost:5159
+[14:33:41]   Concurrent Users: 3
+[14:33:41]   Requests Per User: 2
+[14:33:41]   Total Planned Requests: 6 per endpoint
+[14:33:41]   Started: 2026-03-06 14:33:41
+[14:33:41] ============================================================
+[14:33:41] 
+[14:33:41] --- PHASE 1: Health Check ---
+[14:33:51] Health check FAILED (The remote server returned an error: (503) Server Unavailable.). AI service may be down - tests will measure fallback behavior.
+[14:33:51] 
+[14:33:51] --- PHASE 2: Authentication ---
+[14:34:09] Student login failed: The remote server returned an error: (500) Internal Server Error.
+[14:34:09] Attempting to register student via curl...
+[14:34:09] Student registration status: 500
+[14:34:10] Instructor login failed - registering...
+[14:34:11] ERROR: Cannot proceed without student token. Aborting load test.

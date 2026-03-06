@@ -1,0 +1,130 @@
+[14:52:54] ============================================================
+[14:52:54]   AI LOAD & PERFORMANCE TEST SUITE
+[14:52:54]   Base URL: http://localhost:5194
+[14:52:54]   Concurrent Users: 3
+[14:52:54]   Requests Per User: 2
+[14:52:54]   Total Planned Requests: 6 per endpoint
+[14:52:54]   Started: 2026-03-06 14:52:54
+[14:52:54] ============================================================
+[14:52:54] 
+[14:52:54] --- PHASE 1: Health Check ---
+[14:53:04] Health check FAILED (The remote server returned an error: (503) Server Unavailable.). AI service may be down - tests will measure fallback behavior.
+[14:53:04] 
+[14:53:04] --- PHASE 2: Authentication ---
+[14:53:04] Student login OK (ms)
+[14:53:04] Instructor login OK (ms)
+[14:53:04] 
+[14:53:04] --- PHASE 3: Discover Test Module ---
+[14:53:04] Found test module ID: 1 (Course: 1)
+[14:53:04] 
+[14:53:04] --- PHASE 4: Health Endpoint Load Test (6 requests) ---
+[14:54:04] 
+[14:54:04] ========== HEALTH ENDPOINT ==========
+[14:54:04]   Total Requests:    6
+[14:54:04]   Successful:        0
+[14:54:04]   Failed:            6
+[14:54:04]   Error Rate:        100%
+[14:54:04]   Avg Duration:      10004.17ms
+[14:54:04]   Min Duration:      10002ms
+[14:54:04]   Max Duration:      10007ms
+[14:54:04]   P95 Duration:      10007ms
+[14:54:04]   P99 Duration:      10007ms
+[14:54:04]   Error Details:
+[14:54:04]     - Status 503: The remote server returned an error: (503) Server Unavailable.
+[14:54:04]     - Status 503: The remote server returned an error: (503) Server Unavailable.
+[14:54:04]     - Status 503: The remote server returned an error: (503) Server Unavailable.
+[14:54:04]     - Status 503: The remote server returned an error: (503) Server Unavailable.
+[14:54:04]     - Status 503: The remote server returned an error: (503) Server Unavailable.
+[14:54:04]     - Status 503: The remote server returned an error: (503) Server Unavailable.
+[14:54:04] 
+[14:54:04] --- PHASE 5: Quiz Endpoint Load Test (6 requests) ---
+[14:55:27] 
+[14:55:27] ========== QUIZ ENDPOINT ==========
+[14:55:27]   Total Requests:    6
+[14:55:27]   Successful:        6
+[14:55:27]   Failed:            0
+[14:55:27]   Error Rate:        0%
+[14:55:27]   Avg Duration:      13785.67ms
+[14:55:27]   Min Duration:      13632ms
+[14:55:27]   Max Duration:      14363ms
+[14:55:27]   P95 Duration:      14363ms
+[14:55:27]   P99 Duration:      14363ms
+[14:55:27]   Fallback responses: 6 / 6
+[14:55:27] 
+[14:55:27] --- PHASE 6: Summary Endpoint Load Test (6 requests) ---
+[14:56:49] 
+[14:56:49] ========== SUMMARY ENDPOINT ==========
+[14:56:49]   Total Requests:    6
+[14:56:49]   Successful:        6
+[14:56:49]   Failed:            0
+[14:56:49]   Error Rate:        0%
+[14:56:49]   Avg Duration:      13661.33ms
+[14:56:49]   Min Duration:      13647ms
+[14:56:49]   Max Duration:      13682ms
+[14:56:49]   P95 Duration:      13682ms
+[14:56:49]   P99 Duration:      13682ms
+[14:56:49] 
+[14:56:49] --- PHASE 7: Chat Endpoint Load Test (6 requests) ---
+[14:58:11] 
+[14:58:11] ========== CHAT ENDPOINT ==========
+[14:58:11]   Total Requests:    6
+[14:58:11]   Successful:        6
+[14:58:11]   Failed:            0
+[14:58:11]   Error Rate:        0%
+[14:58:11]   Avg Duration:      13655.67ms
+[14:58:11]   Min Duration:      13633ms
+[14:58:11]   Max Duration:      13683ms
+[14:58:11]   P95 Duration:      13683ms
+[14:58:11]   P99 Duration:      13683ms
+[14:58:11] 
+[14:58:11] --- PHASE 7b: Chat Conversation Continuity Test ---
+[14:58:25]   Turn: 'What is this module about?' -> OK (ms)
+[14:58:38]   Turn: 'Can you elaborate on the first concept you mentioned?' -> OK (ms)
+[14:58:52]   Turn: 'How does that relate to the second topic?' -> OK (ms)
+[14:59:06]   Turn: 'Give me a practical example.' -> OK (ms)
+[14:59:19]   Turn: 'Summarize everything we discussed.' -> OK (ms)
+[14:59:19] 
+[14:59:19] ========== CHAT CONTINUITY (5-turn conversation) ==========
+[14:59:19]   Total Requests:    5
+[14:59:19]   Successful:        5
+[14:59:19]   Failed:            0
+[14:59:19]   Error Rate:        0%
+[14:59:19]   Avg Duration:      13652.2ms
+[14:59:19]   Min Duration:      13618ms
+[14:59:19]   Max Duration:      13671ms
+[14:59:19]   P95 Duration:      13671ms
+[14:59:19]   P99 Duration:      13671ms
+[14:59:19] 
+[14:59:19] --- PHASE 8: Error Handling & Fallback Tests ---
+[14:59:19]   Invalid module ID -> Status 404 (expected 404) PASS
+[14:59:19]   No auth token -> Status 401 (expected 401) PASS
+[14:59:19]   Prompt injection -> Status 400 (expected 400) PASS
+[14:59:19]   Empty message -> Status 400 (expected 400) PASS
+[14:59:19]   Too-short message -> Status 400 (expected 400) PASS
+[14:59:19]   Invalid quiz count (100) -> Status 400 (expected 400) PASS
+[14:59:19] 
+[14:59:19]   Error handling tests: 6 / 6 passed
+[14:59:19] 
+[14:59:19] --- PHASE 9: Monitoring Snapshot ---
+[14:59:19]   Monitoring data retrieved successfully
+[14:59:19]   [summary] calls=6 success=0 failed=6 errRate=100% avg=13645ms p95=13661ms p99=13661ms
+[14:59:19]   [health] calls=14 success=0 failed=14 errRate=100% avg=10002ms p95=10010ms p99=10010ms
+[14:59:19]   [quiz] calls=6 success=0 failed=6 errRate=100% avg=13767.83ms p95=14317ms p99=14317ms
+[14:59:19]   [chat] calls=11 success=0 failed=11 errRate=100% avg=13644.18ms p95=13676ms p99=13676ms
+[14:59:19] 
+[14:59:19] ============================================================
+[14:59:19]   FINAL PERFORMANCE SUMMARY
+[14:59:19] ============================================================
+[14:59:19] 
+[14:59:19] Endpoint                          Total       OK     Fail    Avg(ms)    P95(ms)    P99(ms)    ErrRate
+[14:59:19] --------                          -----       --     ----    -------    -------    -------    -------
+[14:59:19] HEALTH ENDPOINT                       6        0        6   10004.17      10007      10007       100%
+[14:59:19] QUIZ ENDPOINT                         6        6        0   13785.67      14363      14363         0%
+[14:59:19] SUMMARY ENDPOINT                      6        6        0   13661.33      13682      13682         0%
+[14:59:19] CHAT ENDPOINT                         6        6        0   13655.67      13683      13683         0%
+[14:59:20] CHAT CONTINUITY (5-turn conversation)        5        5        0    13652.2      13671      13671         0%
+[14:59:20] 
+[14:59:20] Error Handling: 6 / 6 tests passed
+[14:59:20] Results saved to: C:\Users\akram\Desktop\PPD-02-Backend\scripts\ai_load_test_result_20260306_145254.txt
+[14:59:20] Completed: 2026-03-06 14:59:20
+[14:59:20] ============================================================

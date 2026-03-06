@@ -11,9 +11,12 @@ using Infrastructure.Configurations;
 using Infrastructure.Repositories;
 using Infrastructure.Utilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Polly;
+using Polly.Extensions.Http;
 using System.Text;
 
 
@@ -76,6 +79,23 @@ namespace Backend
                 var options = serviceProvider.GetRequiredService<IOptions<AiServiceSettings>>().Value;
                 client.BaseAddress = new Uri(options.BaseUrl);
                 client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+            })
+            .AddPolicyHandler((serviceProvider, _) =>
+            {
+                var settings = serviceProvider.GetRequiredService<IOptions<AiServiceSettings>>().Value;
+                return HttpPolicyExtensions
+                    .HandleTransientHttpError()
+                    .WaitAndRetryAsync(
+                        settings.RetryCount,
+                        attempt => TimeSpan.FromMilliseconds(settings.RetryBaseDelayMs * Math.Pow(2, attempt - 1)),
+                        onRetry: (outcome, delay, attempt, _) =>
+                        {
+                            var logger = serviceProvider.GetService<ILoggerFactory>()?.CreateLogger("AiHttpRetry");
+                            logger?.LogWarning(
+                                "AI HTTP retry attempt {Attempt} after {DelayMs}ms. Status={Status}",
+                                attempt, delay.TotalMilliseconds,
+                                outcome.Result?.StatusCode.ToString() ?? outcome.Exception?.Message);
+                        });
             });
 
 

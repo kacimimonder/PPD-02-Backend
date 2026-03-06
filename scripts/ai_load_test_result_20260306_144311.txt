@@ -1,0 +1,59 @@
+[14:43:11] ============================================================
+[14:43:11]   AI LOAD & PERFORMANCE TEST SUITE
+[14:43:11]   Base URL: http://localhost:5159
+[14:43:11]   Concurrent Users: 3
+[14:43:11]   Requests Per User: 2
+[14:43:11]   Total Planned Requests: 6 per endpoint
+[14:43:11]   Started: 2026-03-06 14:43:11
+[14:43:11] ============================================================
+[14:43:11] 
+[14:43:11] --- PHASE 1: Health Check ---
+[14:43:21] Health check FAILED (The remote server returned an error: (503) Server Unavailable.). AI service may be down - tests will measure fallback behavior.
+[14:43:21] 
+[14:43:21] --- PHASE 2: Authentication ---
+[14:43:38] Student login failed: The remote server returned an error: (500) Internal Server Error.
+[14:43:38] Attempting to register student via curl...
+[14:43:55] Student registration status: 500
+[14:44:13] Instructor login failed - registering...
+[14:44:14] WARNING: Cannot authenticate - module-level tests will be skipped.
+[14:44:14]          Tests will focus on health, raw endpoints, and error handling.
+[14:44:14] 
+[14:44:14] --- PHASE 3: Discover Test Module ---
+[14:44:14] Module discovery skipped (no auth or -SkipModuleTests)
+[14:44:14] 
+[14:44:14] --- PHASE 4: Health Endpoint Load Test (6 requests) ---
+[14:45:14] 
+[14:45:14] ========== HEALTH ENDPOINT ==========
+[14:45:14]   Total Requests:    6
+[14:45:14]   Successful:        0
+[14:45:14]   Failed:            6
+[14:45:14]   Error Rate:        100%
+[14:45:14]   Avg Duration:      10005.83ms
+[14:45:14]   Min Duration:      10002ms
+[14:45:14]   Max Duration:      10012ms
+[14:45:14]   P95 Duration:      10012ms
+[14:45:14]   P99 Duration:      10012ms
+[14:45:14]   Error Details:
+[14:45:14]     - Status 503: The remote server returned an error: (503) Server Unavailable.
+[14:45:14]     - Status 503: The remote server returned an error: (503) Server Unavailable.
+[14:45:14]     - Status 503: The remote server returned an error: (503) Server Unavailable.
+[14:45:14]     - Status 503: The remote server returned an error: (503) Server Unavailable.
+[14:45:14]     - Status 503: The remote server returned an error: (503) Server Unavailable.
+[14:45:14]     - Status 503: The remote server returned an error: (503) Server Unavailable.
+[14:45:14] Skipping quiz load test (no module found)
+[14:45:14] 
+[14:45:14] --- PHASE 8: Error Handling & Fallback Tests ---
+[14:45:14]   Error handling tests skipped (no auth or -SkipModuleTests)
+[14:45:14] 
+[14:45:14] ============================================================
+[14:45:14]   FINAL PERFORMANCE SUMMARY
+[14:45:14] ============================================================
+[14:45:14] 
+[14:45:14] Endpoint                          Total       OK     Fail    Avg(ms)    P95(ms)    P99(ms)    ErrRate
+[14:45:14] --------                          -----       --     ----    -------    -------    -------    -------
+[14:45:14] HEALTH ENDPOINT                       6        0        6   10005.83      10012      10012       100%
+[14:45:14] 
+[14:45:14] Error Handling: skipped (no DB/auth available)
+[14:45:14] Results saved to: C:\Users\akram\Desktop\PPD-02-Backend\scripts\ai_load_test_result_20260306_144311.txt
+[14:45:14] Completed: 2026-03-06 14:45:14
+[14:45:14] ============================================================

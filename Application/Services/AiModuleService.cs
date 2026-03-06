@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using Application.DTOs.AI;
 using Application.Exceptions;
@@ -45,6 +46,7 @@ namespace Application.Services
             AiModuleSummaryRequestDto request,
             CancellationToken cancellationToken = default)
         {
+            var stopwatch = Stopwatch.StartNew();
             ValidateSummaryRequest(request);
 
             var module = await GetAuthorizedModuleAsync(moduleId, userId, role);
@@ -52,7 +54,9 @@ namespace Application.Services
 
             if (string.IsNullOrWhiteSpace(rawContext) || rawContext.Length < MinTextLength)
             {
-                throw new BadRequestException("This module has insufficient text content to summarize.");
+                throw new BadRequestException(
+                    "This module doesn't have enough content to generate a summary yet. " +
+                    "Please ensure the module has descriptive content added before requesting a summary.");
             }
 
             var content = BuildSummaryContext(module, request.Mode);
@@ -67,12 +71,19 @@ namespace Application.Services
 
             try
             {
-                return await _aiService.SummarizeAsync(summaryRequest, cancellationToken);
+                var response = await _aiService.SummarizeAsync(summaryRequest, cancellationToken);
+                stopwatch.Stop();
+                response.DurationMs = stopwatch.ElapsedMilliseconds;
+                return response;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Summary generation failed for module {ModuleId}", moduleId);
-                return CreateSafeFallbackResponse("summary");
+                stopwatch.Stop();
+                _logger.LogError(ex, "Summary generation failed for module {ModuleId} after {DurationMs}ms",
+                    moduleId, stopwatch.ElapsedMilliseconds);
+                var fallback = CreateSafeFallbackResponse("summary", module);
+                fallback.DurationMs = stopwatch.ElapsedMilliseconds;
+                return fallback;
             }
         }
 
@@ -83,6 +94,7 @@ namespace Application.Services
             AiModuleQuizRequestDto request,
             CancellationToken cancellationToken = default)
         {
+            var stopwatch = Stopwatch.StartNew();
             ValidateQuizRequest(request);
 
             var module = await GetAuthorizedModuleAsync(moduleId, userId, role);
@@ -90,7 +102,9 @@ namespace Application.Services
 
             if (string.IsNullOrWhiteSpace(rawContext) || rawContext.Length < MinQuizTextLength)
             {
-                throw new BadRequestException("This module has insufficient text content to generate a quiz.");
+                throw new BadRequestException(
+                    "This module needs more content before a quiz can be generated. " +
+                    "Please add detailed lesson material (at least a few paragraphs) to create meaningful quiz questions.");
             }
 
             var content = BuildQuizContext(module);
@@ -106,12 +120,19 @@ namespace Application.Services
 
             try
             {
-                return await _aiService.GenerateQuizAsync(quizRequest, cancellationToken);
+                var response = await _aiService.GenerateQuizAsync(quizRequest, cancellationToken);
+                stopwatch.Stop();
+                response.DurationMs = stopwatch.ElapsedMilliseconds;
+                return response;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Quiz generation failed for module {ModuleId}", moduleId);
-                return CreateSafeFallbackResponse("quiz");
+                stopwatch.Stop();
+                _logger.LogError(ex, "Quiz generation failed for module {ModuleId} after {DurationMs}ms",
+                    moduleId, stopwatch.ElapsedMilliseconds);
+                var fallback = CreateSafeFallbackResponse("quiz", module);
+                fallback.DurationMs = stopwatch.ElapsedMilliseconds;
+                return fallback;
             }
         }
 
@@ -122,6 +143,7 @@ namespace Application.Services
             AiModuleChatRequestDto request,
             CancellationToken cancellationToken = default)
         {
+            var stopwatch = Stopwatch.StartNew();
             ValidateChatRequest(request);
 
             var module = await GetAuthorizedModuleAsync(moduleId, userId, role);
@@ -129,7 +151,9 @@ namespace Application.Services
 
             if (string.IsNullOrWhiteSpace(moduleContext) || moduleContext.Length < MinTextLength)
             {
-                throw new BadRequestException("This module has insufficient text content for grounded chat.");
+                throw new BadRequestException(
+                    "This module doesn't have enough content for the AI tutor to reference. " +
+                    "The instructor needs to add lesson content before the chat feature becomes available.");
             }
 
             moduleContext = TrimToMaxChars(moduleContext, MaxModuleContextChars);
@@ -173,11 +197,14 @@ namespace Application.Services
             try
             {
                 var response = await _aiService.ChatAsync(chatRequest, cancellationToken);
+                stopwatch.Stop();
+
                 if (response == null || string.IsNullOrWhiteSpace(response.Output))
                 {
                     _logger.LogWarning("Empty response from AI chat for module {ModuleId}", moduleId);
                     var emptyFallback = CreateGroundedFallbackResponse(module);
                     emptyFallback.ConversationId = conversationId;
+                    emptyFallback.DurationMs = stopwatch.ElapsedMilliseconds;
                     return emptyFallback;
                 }
 
@@ -192,27 +219,24 @@ namespace Application.Services
                 }
 
                 response.ConversationId = conversationId;
+                response.DurationMs = stopwatch.ElapsedMilliseconds;
 
                 _logger.LogInformation(
-                    "Module chat success for user {UserId}, module {ModuleId}, conversation {ConversationId}, historyCount {HistoryCount}",
-                    userId,
-                    moduleId,
-                    conversationId,
-                    history.Count);
+                    "Module chat success for user {UserId}, module {ModuleId}, conversation {ConversationId}, historyCount {HistoryCount}, durationMs {DurationMs}",
+                    userId, moduleId, conversationId, history.Count, stopwatch.ElapsedMilliseconds);
 
                 return response;
             }
             catch (Exception ex)
             {
-                _logger.LogError(
-                    ex,
-                    "Module chat failed for user {UserId}, module {ModuleId}, conversation {ConversationId}",
-                    userId,
-                    moduleId,
-                    conversationId);
+                stopwatch.Stop();
+                _logger.LogError(ex,
+                    "Module chat failed for user {UserId}, module {ModuleId}, conversation {ConversationId}, durationMs {DurationMs}",
+                    userId, moduleId, conversationId, stopwatch.ElapsedMilliseconds);
 
                 var fallback = CreateGroundedFallbackResponse(module);
                 fallback.ConversationId = conversationId;
+                fallback.DurationMs = stopwatch.ElapsedMilliseconds;
                 return fallback;
             }
         }
@@ -223,17 +247,17 @@ namespace Application.Services
         {
             if (request == null)
             {
-                throw new BadRequestException("Request cannot be null.");
+                throw new BadRequestException("Please provide summary options (language, bullet count, and mode).");
             }
 
             if (request.MaxBullets < 3 || request.MaxBullets > 15)
             {
-                throw new BadRequestException("Max bullets must be between 3 and 15.");
+                throw new BadRequestException("The number of bullet points should be between 3 and 15. Please adjust and try again.");
             }
 
             if (!string.IsNullOrEmpty(request.Language) && request.Language.Length > 8)
             {
-                throw new BadRequestException("Language code cannot exceed 8 characters.");
+                throw new BadRequestException("The language code is too long. Please use a standard code like 'en', 'fr', or 'es'.");
             }
         }
 
@@ -241,17 +265,17 @@ namespace Application.Services
         {
             if (request == null)
             {
-                throw new BadRequestException("Request cannot be null.");
+                throw new BadRequestException("Please provide quiz options (question count, difficulty, and language).");
             }
 
             if (request.QuestionsCount < 3 || request.QuestionsCount > 15)
             {
-                throw new BadRequestException("Questions count must be between 3 and 15.");
+                throw new BadRequestException("Quiz questions count should be between 3 and 15. Please adjust and try again.");
             }
 
             if (!string.IsNullOrEmpty(request.Language) && request.Language.Length > 8)
             {
-                throw new BadRequestException("Language code cannot exceed 8 characters.");
+                throw new BadRequestException("The language code is too long. Please use a standard code like 'en', 'fr', or 'es'.");
             }
         }
 
@@ -259,33 +283,37 @@ namespace Application.Services
         {
             if (request == null)
             {
-                throw new BadRequestException("Request cannot be null.");
+                throw new BadRequestException("Please provide a message to start the conversation.");
             }
 
             if (string.IsNullOrWhiteSpace(request.Message))
             {
-                throw new BadRequestException("Message cannot be empty.");
+                throw new BadRequestException("Your message is empty. Please type a question about the module content.");
             }
 
             var trimmedMessage = request.Message.Trim();
             if (trimmedMessage.Length > MaxMessageLength)
             {
-                throw new BadRequestException($"Message cannot exceed {MaxMessageLength} characters.");
+                throw new BadRequestException(
+                    $"Your message is too long ({trimmedMessage.Length} characters). " +
+                    $"Please shorten it to {MaxMessageLength} characters or less.");
             }
 
             if (trimmedMessage.Length < 2)
             {
-                throw new BadRequestException("Message must be at least 2 characters.");
+                throw new BadRequestException("Your message is too short. Please ask a complete question about the module.");
             }
 
             if (ContainsSuspiciousPattern(trimmedMessage))
             {
-                throw new BadRequestException("Message contains suspicious patterns.");
+                throw new BadRequestException(
+                    "Your message contains content that cannot be processed. " +
+                    "Please rephrase your question about the module material.");
             }
 
             if (!string.IsNullOrEmpty(request.Language) && request.Language.Length > 8)
             {
-                throw new BadRequestException("Language code cannot exceed 8 characters.");
+                throw new BadRequestException("The language code is too long. Please use a standard code like 'en', 'fr', or 'es'.");
             }
 
             if (request.History != null)
@@ -294,12 +322,13 @@ namespace Application.Services
                 {
                     if (string.IsNullOrWhiteSpace(msg.Content))
                     {
-                        throw new BadRequestException("History messages cannot have empty content.");
+                        throw new BadRequestException("Conversation history contains an empty message. Please remove it and retry.");
                     }
 
                     if (msg.Content.Length > MaxMessageLength)
                     {
-                        throw new BadRequestException("History message content exceeds maximum length.");
+                        throw new BadRequestException(
+                            $"A message in your conversation history exceeds the {MaxMessageLength}-character limit.");
                     }
                 }
             }
@@ -314,7 +343,16 @@ namespace Application.Services
                 "you are now a different",
                 "new system prompt",
                 "<script>alert(",
-                "javascript:alert("
+                "javascript:alert(",
+                "ignore all instructions",
+                "forget your instructions",
+                "override system prompt",
+                "act as if you",
+                "pretend you are",
+                "bypass content filter",
+                "ignore safety",
+                "reveal your prompt",
+                "show me your system"
             };
 
             var lowerMessage = message.ToLowerInvariant();
@@ -403,37 +441,56 @@ namespace Application.Services
         private static string BuildGroundedChatSystemPrompt(CourseModule module, string? language)
         {
             var languageName = GetLanguageName(language);
+            var sectionNames = module.ModuleContents != null
+                ? string.Join(", ", module.ModuleContents
+                    .Where(c => !string.IsNullOrWhiteSpace(c?.Name))
+                    .Select(c => $"'{c.Name}'"))
+                : "the module content";
 
-            return $@"You are a module-grounded tutor for MiniCoursera, an online learning platform.
-Your role is to help students understand the course material by answering questions based ONLY on the provided module context.
+            return $@"You are a knowledgeable and encouraging tutor for the MiniCoursera learning platform.
+Your purpose is to help students deeply understand the material in the module ""{module.Name}"".
 
-## Guidelines:
-1. Answer questions using ONLY information from the module context provided
-2. If the answer cannot be derived from the context, explicitly state: 'This information is not covered in the module. Please review the module content for more details.'
-3. Be encouraging and supportive
-4. Use clear, simple language
-5. Provide examples when helpful
-6. If asked about topics not covered in the module, suggest which part of the module to review
+## STRICT GROUNDING RULES:
+1. ONLY answer using information explicitly present in the module context provided below.
+2. If a question cannot be answered from the module content, respond with:
+   ""I don't have information about that in this module's content. Based on what's covered here, I can help you with topics from these sections: {sectionNames}. Would you like to explore any of these?""
+3. NEVER invent, assume, or hallucinate information not in the module context.
+4. If the student asks a follow-up, reference specific parts of the module content in your answer.
 
-## Current Module:
+## TEACHING STYLE:
+- Be warm, encouraging, and patient
+- Use clear, concise language appropriate for learners
+- Break complex concepts into digestible pieces
+- Provide examples from the module content when available
+- Use bullet points or numbered lists for multi-part answers
+- When explaining a concept, connect it to other concepts mentioned in the module
+- End with a brief follow-up suggestion when appropriate (e.g., ""Would you like me to explain [related concept] next?"")
+
+## FORMATTING:
+- Use markdown formatting for readability
+- Bold key terms and definitions
+- Use code blocks for any code examples
+- Keep responses focused and under 500 words unless the student asks for detailed explanation
+
+## CURRENT MODULE:
 Title: {module.Name}
 Description: {module.Description}
 
-## Language:
-Respond in {languageName}.";
+## LANGUAGE:
+Respond entirely in {languageName}.";
         }
 
         private static string BuildGroundedChatUserMessage(string moduleContext, string userQuestion)
         {
-            return $@"Use the module context below to answer the student's question.
+            return $@"Use ONLY the module context below to answer the student's question. Do not use any external knowledge.
 
 ## Module Context:
 {moduleContext}
 
-## Student Question:
+## Student's Question:
 {userQuestion}
 
-Answer based on the module context:";
+Provide a helpful, grounded answer:";
         }
 
         private static string GetLanguageName(string? languageCode)
@@ -463,20 +520,37 @@ Answer based on the module context:";
 
         #region Fallback Methods
 
-        private static AiTextResponseDto CreateSafeFallbackResponse(string type)
+        private static AiTextResponseDto CreateSafeFallbackResponse(string type, CourseModule? module = null)
         {
+            var moduleName = module?.Name ?? "the module";
             var fallbackMessages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["summary"] = "I apologize, but I'm temporarily unable to generate a summary. Please try again in a moment. In the meantime, review the module title and description to get an overview of the content.",
-                ["quiz"] = "I apologize, but I'm temporarily unable to generate a quiz. Please try again in a moment. To practice, try creating your own questions based on the module content.",
-                ["chat"] = "AI chat is temporarily unavailable. Please try again in a moment. For now, review the module title, description, and content sections to continue learning."
+                ["summary"] = $"The AI summary service is temporarily unavailable. While we work on restoring it, " +
+                              $"here's what you can do:\n\n" +
+                              $"- Review the module **\"{moduleName}\"** directly for key concepts\n" +
+                              $"- Focus on section headings and bold terms for main ideas\n" +
+                              $"- Try generating the summary again in a few moments\n\n" +
+                              $"We apologize for the inconvenience.",
+                ["quiz"] = $"The AI quiz generator is temporarily unavailable. In the meantime, you can:\n\n" +
+                           $"- Review **\"{moduleName}\"** and create your own practice questions\n" +
+                           $"- Focus on key definitions, processes, and comparisons in the material\n" +
+                           $"- Try generating the quiz again in a few moments\n\n" +
+                           $"Self-testing is one of the most effective study strategies!",
+                ["chat"] = $"The AI tutor is briefly unavailable. While it's being restored:\n\n" +
+                           $"- Browse through **\"{moduleName}\"** for answers to your question\n" +
+                           $"- Check the module description for an overview of covered topics\n" +
+                           $"- Try asking your question again in a few moments\n\n" +
+                           $"We'll be back to help you learn shortly!"
             };
 
             return new AiTextResponseDto
             {
                 Provider = "backend-fallback",
                 Model = "safe-fallback",
-                Output = fallbackMessages.GetValueOrDefault(type, "An error occurred. Please try again.")
+                Output = fallbackMessages.GetValueOrDefault(type,
+                    "Something went wrong on our end. Please try your request again in a moment."),
+                IsFallback = true,
+                Status = "fallback"
             };
         }
 
@@ -485,11 +559,26 @@ Answer based on the module context:";
             var moduleName = module.Name ?? "this module";
             var moduleDescription = module.Description ?? "the course content";
 
+            var sectionHints = "";
+            if (module.ModuleContents != null && module.ModuleContents.Any())
+            {
+                var sectionNames = module.ModuleContents
+                    .Where(c => !string.IsNullOrWhiteSpace(c?.Name))
+                    .Select(c => $"**{c.Name}**")
+                    .Take(5);
+                sectionHints = $"\n\nAvailable sections you can explore: {string.Join(", ", sectionNames)}";
+            }
+
             return new AiTextResponseDto
             {
                 Provider = "backend-fallback",
                 Model = "grounded-fallback",
-                Output = $"I apologize, but I'm temporarily unable to process your question. For now, please review '{moduleName}' - {moduleDescription}. Try asking a question about a specific concept from the module content."
+                Output = $"The AI tutor is temporarily unable to process your question right now. " +
+                         $"While we restore the service, you can continue learning by reviewing " +
+                         $"**\"{moduleName}\"** — {moduleDescription}.{sectionHints}\n\n" +
+                         $"Please try asking your question again in a moment.",
+                IsFallback = true,
+                Status = "fallback"
             };
         }
 
