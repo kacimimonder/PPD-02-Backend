@@ -81,12 +81,19 @@ namespace API.Controllers
                 {
                     return NotFound("No available user");
                 }
-                HttpContext.Response.Cookies.Append("refreshToken", userDTO.RefreshToken, new CookieOptions
+                var cookieOptions = new CookieOptions
                 {
                     HttpOnly = true,
-                    Secure = true, // only over HTTPS
-                    SameSite = SameSiteMode.None, // 👈 Required for cross-origin cookies
+                    Secure = HttpContext.Request.IsHttps,
+                    SameSite = HttpContext.Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax,
                     Expires = userDTO.RefreshTokenExpiration
+                };
+                HttpContext.Response.Cookies.Append("refreshToken", userDTO.RefreshToken, new CookieOptions
+                {
+                    HttpOnly = cookieOptions.HttpOnly,
+                    Secure = cookieOptions.Secure,
+                    SameSite = cookieOptions.SameSite,
+                    Expires = cookieOptions.Expires
                 });
                 return Ok(userDTO);
             }
@@ -109,12 +116,19 @@ namespace API.Controllers
                 string? refreshToken = Request.Cookies["refreshToken"];
                 if (string.IsNullOrEmpty(refreshToken)) return BadRequest("Invalid request");
                 UserReadDTO? userReadDTO = await _userService.RefreshTokens(refreshToken);
-                HttpContext.Response.Cookies.Append("refreshToken", userReadDTO.RefreshToken, new CookieOptions
+                var cookieOptions = new CookieOptions
                 {
                     HttpOnly = true,
-                    Secure = true, // only over HTTPS
-                    SameSite = SameSiteMode.None, // 👈 Required for cross-origin cookies
+                    Secure = HttpContext.Request.IsHttps,
+                    SameSite = HttpContext.Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax,
                     Expires = userReadDTO.RefreshTokenExpiration
+                };
+                HttpContext.Response.Cookies.Append("refreshToken", userReadDTO.RefreshToken, new CookieOptions
+                {
+                    HttpOnly = cookieOptions.HttpOnly,
+                    Secure = cookieOptions.Secure,
+                    SameSite = cookieOptions.SameSite,
+                    Expires = cookieOptions.Expires
                 });
                 return Ok(userReadDTO);
             }
