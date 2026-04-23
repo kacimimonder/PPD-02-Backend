@@ -81,6 +81,7 @@ namespace Infrastructure.Repositories
         {
             return await _miniCourseraContext.Courses
                 .Where(course => course.InstructorID == instructorId)
+                .Include(course => course.Instructor)
                 .Include(course => course.CourseModules)
                 .ToListAsync();
         }
@@ -92,7 +93,9 @@ namespace Infrastructure.Repositories
         }
         public async Task<List<Course>> GetCoursesByFilterAsync(FilterCoursesModel filterCoursesModel)
         {
-            var query = _miniCourseraContext.Courses.AsQueryable();
+            var query = _miniCourseraContext.Courses
+                .Include(course => course.Instructor)
+                .AsQueryable();
             if (filterCoursesModel.LanguageIDs != null && filterCoursesModel.LanguageIDs.Any())
             {
                 query = query
@@ -107,10 +110,12 @@ namespace Infrastructure.Repositories
             {
                 query = query.Where(c => filterCoursesModel.Levels.Contains(c.Level));
             }
-            // The search functionality (Can be refactored)
-            query = query
-            .Where(course => course.Title.Contains(filterCoursesModel.SearchTerm)
-            || course.Description.Contains(filterCoursesModel.SearchTerm));
+            if (!string.IsNullOrWhiteSpace(filterCoursesModel.SearchTerm))
+            {
+                query = query.Where(course =>
+                    course.Title.Contains(filterCoursesModel.SearchTerm)
+                    || course.Description.Contains(filterCoursesModel.SearchTerm));
+            }
 
 
             return await query.ToListAsync();
