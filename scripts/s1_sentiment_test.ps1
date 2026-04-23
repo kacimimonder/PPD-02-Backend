@@ -1,5 +1,9 @@
+param(
+  [string]$Base = 'http://127.0.0.1:5194'
+)
+
 $ErrorActionPreference='Stop'
-$base='http://127.0.0.1:5085'
+$base = $Base
 $suffix=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $email="ai.s1.$suffix@example.com"
 $pwd='Pass@12345'

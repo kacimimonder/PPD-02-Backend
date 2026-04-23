@@ -1,4 +1,8 @@
-$base='http://127.0.0.1:5085'
+param(
+    [string]$Base = 'http://127.0.0.1:5194'
+)
+
+$base = $Base
 $suffix=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $email="ai.e2e.$suffix@example.com"
 $pwd='Pass@12345'

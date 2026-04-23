@@ -5,7 +5,7 @@
 ###############################################################################
 
 param(
-    [string]$BaseUrl = "http://localhost:5159",
+    [string]$BaseUrl = "http://localhost:5194",
     [int]$ConcurrentUsers = 5,
     [int]$RequestsPerUser = 3,
     [string]$StudentEmail = "loadtest_student@test.com",
