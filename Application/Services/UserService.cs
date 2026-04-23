@@ -28,10 +28,14 @@ namespace Application.Services
             _tokenService = tokenService;
         }
 
-        public async Task CreateUserAsync(UserCreateDTO userCreateDTO, Stream imageStream)
+        public async Task CreateUserAsync(UserCreateDTO userCreateDTO, Stream? imageStream)
         {
             // Map UserCreateDTO to User entity
-            var imageUrl = await _imageStorage.SaveImageAsync(imageStream);
+            string? imageUrl = null;
+            if (imageStream != null)
+            {
+                imageUrl = await _imageStorage.SaveImageAsync(imageStream);
+            }
 
             var user = _mapper.Map<User>(userCreateDTO);
             user.PhotoUrl = imageUrl;
