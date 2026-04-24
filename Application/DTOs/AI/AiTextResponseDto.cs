@@ -6,6 +6,7 @@ namespace Application.DTOs.AI
         public string Provider { get; set; } = string.Empty;
         public string Model { get; set; } = string.Empty;
         public string? ConversationId { get; set; }
+        public int? QuizId { get; set; }
 
         /// <summary>
         /// Server-side processing time in milliseconds (including AI call)

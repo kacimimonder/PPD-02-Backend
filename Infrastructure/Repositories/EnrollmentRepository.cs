@@ -84,6 +84,15 @@ namespace Infrastructure.Repositories
                 && enroll.StudentId == studentId);
         }
 
+        public async Task<List<Enrollment>> GetCourseEnrollmentsWithStudentAsync(int courseId)
+        {
+            return await _miniCourseraContext.Enrollments
+                .Include(e => e.Student)
+                .Include(e => e.enrollmentProgresses)
+                .Where(e => e.CourseId == courseId)
+                .ToListAsync();
+        }
+
         public Task UpdateAsync(Enrollment entity)
         {
             throw new NotImplementedException();

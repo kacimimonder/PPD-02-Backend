@@ -13,5 +13,6 @@ namespace Domain.Interfaces
         Task <Enrollment?> GetEnrollmentByCourseIdAndStudentId(int courseId, int studentId);
         Task<Enrollment?> GetEnrollmentWithProgressAndCourse(int EnrollmentId);
         Task <bool> IsStudentEnrolledInCourse(int studentId,int courseId);
+        Task<List<Enrollment>> GetCourseEnrollmentsWithStudentAsync(int courseId);
     }
 }

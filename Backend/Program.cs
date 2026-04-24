@@ -52,6 +52,12 @@ namespace Backend
             builder.Services.AddScoped<EnrollmentProgressService>();
             builder.Services.AddScoped<IEnrollmentProgressRepository, EnrollmentProgressRepository>();
 
+            // Quiz progress and persistence
+            builder.Services.AddScoped<QuizProgressService>();
+            builder.Services.AddScoped<IAiGeneratedQuizRepository, AiGeneratedQuizRepository>();
+            builder.Services.AddScoped<IQuizAssignmentRepository, QuizAssignmentRepository>();
+            builder.Services.AddScoped<IStudentQuizAttemptRepository, StudentQuizAttemptRepository>();
+
             // CourseModule
             builder.Services.AddScoped<CourseModuleService>();
             builder.Services.AddScoped<ICourseModuleRepository, CourseModuleRepository>();

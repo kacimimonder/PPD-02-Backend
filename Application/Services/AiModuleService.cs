@@ -19,6 +19,7 @@ namespace Application.Services
         private readonly ICourseModuleRepository _courseModuleRepository;
         private readonly IEnrollmentRepository _enrollmentRepository;
         private readonly ICourseRepository _courseRepository;
+        private readonly QuizProgressService _quizProgressService;
         private readonly AiService _aiService;
         private readonly AiConversationMemoryService _conversationMemory;
         private readonly ILogger<AiModuleService> _logger;
@@ -27,6 +28,7 @@ namespace Application.Services
             ICourseModuleRepository courseModuleRepository,
             IEnrollmentRepository enrollmentRepository,
             ICourseRepository courseRepository,
+            QuizProgressService quizProgressService,
             AiService aiService,
             AiConversationMemoryService conversationMemory,
             ILogger<AiModuleService> logger)
@@ -34,6 +36,7 @@ namespace Application.Services
             _courseModuleRepository = courseModuleRepository;
             _enrollmentRepository = enrollmentRepository;
             _courseRepository = courseRepository;
+            _quizProgressService = quizProgressService;
             _aiService = aiService;
             _conversationMemory = conversationMemory;
             _logger = logger;
@@ -121,6 +124,26 @@ namespace Application.Services
             try
             {
                 var response = await _aiService.GenerateQuizAsync(quizRequest, cancellationToken);
+
+                try
+                {
+                    var persistedQuiz = await _quizProgressService.PersistGeneratedQuizAsync(
+                        moduleId,
+                        userId,
+                        role,
+                        request,
+                        response.Output);
+                    response.QuizId = persistedQuiz.Id;
+                }
+                catch (Exception persistenceException)
+                {
+                    _logger.LogWarning(
+                        persistenceException,
+                        "Quiz generation succeeded but persistence failed for module {ModuleId}, user {UserId}",
+                        moduleId,
+                        userId);
+                }
+
                 stopwatch.Stop();
                 response.DurationMs = stopwatch.ElapsedMilliseconds;
                 return response;

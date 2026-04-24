@@ -7,9 +7,10 @@ from typing import List, Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, validator
+from pathlib import Path
+from dotenv import load_dotenv
 
-load_dotenv()
-
+load_dotenv(dotenv_path=Path(__file__).with_name(".env"), override=True)
 try:
     from google import genai
 except Exception:
