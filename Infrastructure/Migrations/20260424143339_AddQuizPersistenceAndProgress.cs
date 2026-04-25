@@ -127,7 +127,7 @@ namespace Infrastructure.Migrations
                         column: x => x.QuizAssignmentId,
                         principalTable: "QuizAssignments",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateIndex(

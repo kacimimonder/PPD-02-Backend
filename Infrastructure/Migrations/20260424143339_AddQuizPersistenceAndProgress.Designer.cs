@@ -876,7 +876,7 @@ namespace Infrastructure.Migrations
                     b.HasOne("Domain.Entities.QuizAssignment", "QuizAssignment")
                         .WithMany("Attempts")
                         .HasForeignKey("QuizAssignmentId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("AiGeneratedQuiz");
 

@@ -13,10 +13,12 @@ namespace API.Controllers
     public class QuizProgressController : ControllerBase
     {
         private readonly QuizProgressService _quizProgressService;
+        private readonly ILogger<QuizProgressController> _logger;
 
-        public QuizProgressController(QuizProgressService quizProgressService)
+        public QuizProgressController(QuizProgressService quizProgressService, ILogger<QuizProgressController> logger)
         {
             _quizProgressService = quizProgressService;
+            _logger = logger;
         }
 
         [HttpPost("assignments")]
@@ -49,6 +51,11 @@ namespace API.Controllers
             catch (BadRequestException ex)
             {
                 return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error while creating quiz assignments for instructor {InstructorId}.", instructorId);
+                return StatusCode(StatusCodes.Status500InternalServerError, "Unexpected server error while assigning quizzes.");
             }
         }
 
@@ -83,6 +90,11 @@ namespace API.Controllers
             {
                 return BadRequest(ex.Message);
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error while creating quiz attempt for student {StudentId}.", studentId);
+                return StatusCode(StatusCodes.Status500InternalServerError, "Unexpected server error while saving quiz attempt.");
+            }
         }
 
         [HttpGet("courses/{courseId:int}")]
@@ -110,6 +122,11 @@ namespace API.Controllers
             catch (ForbiddenException ex)
             {
                 return StatusCode(StatusCodes.Status403Forbidden, ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error while loading quiz progress for instructor {InstructorId}, course {CourseId}.", instructorId, courseId);
+                return StatusCode(StatusCodes.Status500InternalServerError, "Unexpected server error while loading quiz progress.");
             }
         }
     }

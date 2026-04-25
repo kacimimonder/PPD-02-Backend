@@ -37,7 +37,7 @@ namespace Infrastructure.Configurations
             builder.HasOne(a => a.QuizAssignment)
                 .WithMany(q => q.Attempts)
                 .HasForeignKey(a => a.QuizAssignmentId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }
