@@ -118,6 +118,38 @@ class EmotionResponse(BaseModel):
     model: str
 
 
+class RecommendationCourseCandidate(BaseModel):
+    courseId: int
+    title: str
+    description: str = ""
+    instructorName: str = ""
+    imageUrl: str = ""
+    price: float = 0
+
+
+class RecommendationsRequest(BaseModel):
+    ambitions: str = Field(min_length=3, max_length=1200)
+    interests: str = Field(min_length=3, max_length=1200)
+    courses: List[RecommendationCourseCandidate] = Field(default_factory=list)
+    maxRecommendations: int = Field(default=4, ge=1, le=8)
+    language: str = Field(default="en", min_length=2, max_length=8)
+
+
+class RecommendationItem(BaseModel):
+    courseId: int
+    reason: str
+    matchScore: float
+
+
+class RecommendationsResponse(BaseModel):
+    summary: str
+    recommendations: List[RecommendationItem]
+    provider: str
+    model: str
+    isFallback: bool = False
+    status: str = "success"
+
+
 class AiTextResponse(BaseModel):
     output: str
     provider: str
@@ -306,6 +338,103 @@ Return ONLY valid JSON with fields:
 
 Language code: {request.language}
 Message: {request.message}
+"""
+
+
+def _tokenize_for_recommendations(text: str) -> set[str]:
+    if not text:
+        return set()
+
+    stopwords = {
+        "the", "and", "for", "with", "that", "this", "your", "want", "from", "into", "about", "learn"
+    }
+
+    tokens = re.split(r"[\s,.;:!?\-_/\\]+", text.lower())
+    return {token for token in tokens if len(token) > 2 and token not in stopwords}
+
+
+def _fallback_recommendations(request: RecommendationsRequest) -> RecommendationsResponse:
+    profile_tokens = _tokenize_for_recommendations(f"{request.ambitions} {request.interests}")
+
+    ranked = []
+    for course in request.courses:
+        course_tokens = _tokenize_for_recommendations(
+            f"{course.title} {course.description} {course.instructorName}"
+        )
+        overlap = profile_tokens.intersection(course_tokens)
+        if not profile_tokens:
+            score = 0.45
+        else:
+            score = min(1.0, 0.35 + (len(overlap) / max(1, len(profile_tokens))))
+
+        reason = (
+            f"This course matches your interests in {', '.join(sorted(list(overlap))[:3])}."
+            if overlap
+            else "This course is a strong starter match for your ambitions and interests."
+        )
+
+        ranked.append(
+            RecommendationItem(
+                courseId=course.courseId,
+                reason=reason,
+                matchScore=round(float(score), 2)
+            )
+        )
+
+    ranked.sort(key=lambda item: (-item.matchScore, item.courseId))
+    top_items = ranked[:request.maxRecommendations]
+
+    return RecommendationsResponse(
+        summary="Fallback recommendations were generated from your goals and course metadata.",
+        recommendations=top_items,
+        provider="backend-fallback",
+        model="rules",
+        isFallback=True,
+        status="fallback"
+    )
+
+
+def _build_recommendations_prompt(request: RecommendationsRequest) -> str:
+    language_map = {
+        "en": "English", "fr": "French", "es": "Spanish", "de": "German",
+        "ar": "Arabic", "zh": "Chinese", "ja": "Japanese", "pt": "Portuguese"
+    }
+    language_name = language_map.get(request.language.lower(), "English")
+
+    courses_payload = [
+        {
+            "courseId": c.courseId,
+            "title": c.title,
+            "description": c.description,
+            "instructorName": c.instructorName,
+            "price": c.price,
+        }
+        for c in request.courses
+    ]
+
+    return f"""You are an academic advisor AI. Recommend courses that best match the student's ambitions and interests.
+
+Student ambitions: {request.ambitions}
+Student interests: {request.interests}
+Language: {language_name}
+Maximum recommendations: {request.maxRecommendations}
+
+Available courses JSON:
+{json.dumps(courses_payload, ensure_ascii=False)}
+
+Return ONLY valid JSON with this exact shape:
+{{
+  "summary": "1-2 sentences describing recommendation strategy",
+  "recommendations": [
+    {{ "courseId": 123, "reason": "short reason", "matchScore": 0.0 }}
+  ]
+}}
+
+Rules:
+- Use only courseId values from available courses.
+- Return up to max recommendations.
+- matchScore must be between 0 and 1.
+- Explain each recommendation briefly and concretely.
 """
 
 
@@ -699,6 +828,102 @@ def emotion(request: EmotionRequest):
             provider="fallback",
             model="rules",
         )
+
+
+@app.post("/recommendations", response_model=RecommendationsResponse)
+def recommendations(request: RecommendationsRequest):
+    if not request.courses:
+        return RecommendationsResponse(
+            summary="No available courses were provided for recommendation.",
+            recommendations=[],
+            provider="backend",
+            model="n/a",
+            isFallback=False,
+            status="success"
+        )
+
+    if FAKE_MODE:
+        return _fallback_recommendations(request)
+
+    try:
+        prompt = _build_recommendations_prompt(request)
+        generated = _generate(prompt, "chat")
+
+        parsed = None
+        try:
+            parsed = json.loads(generated.output)
+        except Exception:
+            match = re.search(r"\{[\s\S]*\}", generated.output)
+            if match:
+                parsed = json.loads(match.group(0))
+
+        if not isinstance(parsed, dict):
+            return _fallback_recommendations(request)
+
+        raw_items = parsed.get("recommendations", [])
+        if not isinstance(raw_items, list):
+            raw_items = []
+
+        allowed_ids = {course.courseId for course in request.courses}
+        items: List[RecommendationItem] = []
+
+        for item in raw_items:
+            if not isinstance(item, dict):
+                continue
+
+            try:
+                course_id = int(item.get("courseId"))
+            except Exception:
+                continue
+
+            if course_id not in allowed_ids:
+                continue
+
+            reason = str(item.get("reason", "Recommended based on your goals and interests.")).strip()
+            if not reason:
+                reason = "Recommended based on your goals and interests."
+
+            try:
+                score = float(item.get("matchScore", 0.5))
+            except Exception:
+                score = 0.5
+            score = max(0.0, min(1.0, score))
+
+            items.append(
+                RecommendationItem(
+                    courseId=course_id,
+                    reason=reason,
+                    matchScore=round(score, 2)
+                )
+            )
+
+        deduped = {}
+        for rec in items:
+            if rec.courseId not in deduped or rec.matchScore > deduped[rec.courseId].matchScore:
+                deduped[rec.courseId] = rec
+
+        final_items = sorted(
+            deduped.values(),
+            key=lambda rec: (-rec.matchScore, rec.courseId)
+        )[:request.maxRecommendations]
+
+        if not final_items:
+            return _fallback_recommendations(request)
+
+        summary = str(parsed.get("summary", "These courses best align with your goals and interests.")).strip()
+        if not summary:
+            summary = "These courses best align with your goals and interests."
+
+        return RecommendationsResponse(
+            summary=summary,
+            recommendations=final_items,
+            provider=generated.provider,
+            model=generated.model,
+            isFallback=False,
+            status="success"
+        )
+    except Exception:
+        return _fallback_recommendations(request)
 
 
 if __name__ == "__main__":

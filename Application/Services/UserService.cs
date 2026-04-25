@@ -1,4 +1,5 @@
 ﻿using Application.DTOs.RefreshToken;
+using Application.DTOs.AI;
 using Application.DTOs.User;
 using Application.Exceptions;
 using AutoMapper;
@@ -120,6 +121,31 @@ namespace Application.Services
             userDTO.RefreshTokenExpiration = newRefreshToken.ExpiresOn;
             await _refreshTokenRepository.AddAsync(newRefreshToken);
             return userDTO;
+        }
+
+        public async Task<AiRecommendationsProfileDto> GetAiRecommendationsProfileAsync(int userId)
+        {
+            var user = await _userRepository.GetByIdAsync(userId)
+                ?? throw new NotFoundException("User was not found.");
+
+            return new AiRecommendationsProfileDto
+            {
+                Ambitions = user.AiAmbitions ?? string.Empty,
+                Interests = user.AiInterests ?? string.Empty,
+                UpdatedAtUtc = user.AiProfileUpdatedAtUtc
+            };
+        }
+
+        public async Task UpsertAiRecommendationsProfileAsync(int userId, string ambitions, string interests)
+        {
+            var user = await _userRepository.GetByIdAsync(userId)
+                ?? throw new NotFoundException("User was not found.");
+
+            user.AiAmbitions = ambitions;
+            user.AiInterests = interests;
+            user.AiProfileUpdatedAtUtc = DateTime.UtcNow;
+
+            await _userRepository.UpdateAsync(user);
         }
 
     }

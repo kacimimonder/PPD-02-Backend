@@ -50,14 +50,15 @@ namespace Infrastructure.Repositories
             throw new NotImplementedException();
         }
 
-        public Task<User?> GetByIdAsync(int id)
+        public async Task<User?> GetByIdAsync(int id)
         {
-            throw new NotImplementedException();
+            return await _miniCourseraContext.Users.FirstOrDefaultAsync(u => u.Id == id);
         }
 
-        public Task UpdateAsync(User entity)
+        public async Task UpdateAsync(User entity)
         {
-            throw new NotImplementedException();
+            _miniCourseraContext.Users.Update(entity);
+            await _miniCourseraContext.SaveChangesAsync();
         }
     }
 }

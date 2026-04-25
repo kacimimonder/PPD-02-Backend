@@ -107,6 +107,51 @@ namespace Application.Services
             }
         }
 
+        public async Task<AiCourseRecommendationsResponseDto> RecommendCoursesAsync(
+            AiCourseRecommendationsRequestDto request,
+            CancellationToken cancellationToken = default)
+        {
+            if (request.Courses == null || request.Courses.Count == 0)
+            {
+                return new AiCourseRecommendationsResponseDto
+                {
+                    Summary = "No available courses matched your current availability filters.",
+                    Recommendations = new List<AiCourseRecommendationItemDto>(),
+                    Provider = "backend-fallback",
+                    Model = "rules",
+                    IsFallback = true,
+                    Status = "fallback"
+                };
+            }
+
+            try
+            {
+                var response = await PostSignalAsync<AiCourseRecommendationsRequestDto, AiCourseRecommendationsResponseDto>(
+                    "recommendations", request, _settings.ChatTimeoutSeconds, cancellationToken);
+
+                var candidateIds = request.Courses.Select(c => c.CourseId).ToHashSet();
+                response.Recommendations = response.Recommendations
+                    .Where(r => candidateIds.Contains(r.CourseId))
+                    .OrderByDescending(r => r.MatchScore)
+                    .ThenBy(r => r.CourseId)
+                    .Take(request.MaxRecommendations)
+                    .ToList();
+
+                if (response.Recommendations.Count == 0)
+                {
+                    return BuildRecommendationFallback(request, "AI output could not be mapped to available courses.");
+                }
+
+                response.Status = string.IsNullOrWhiteSpace(response.Status) ? "success" : response.Status;
+                return response;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Course recommendation failed. Using backend fallback ranking.");
+                return BuildRecommendationFallback(request, "Fallback recommendations were generated based on your interests and ambitions.");
+            }
+        }
+
         public async Task<bool> IsHealthyAsync(CancellationToken cancellationToken = default)
         {
             var stopwatch = Stopwatch.StartNew();
@@ -319,5 +364,63 @@ namespace Application.Services
 
         private static bool IsValidEmotion(string emotion)
             => emotion is "confused" or "frustrated" or "engaged" or "confident" or "neutral";
+
+        private static AiCourseRecommendationsResponseDto BuildRecommendationFallback(
+            AiCourseRecommendationsRequestDto request,
+            string summary)
+        {
+            var intentTokens = Tokenize($"{request.Ambitions} {request.Interests}");
+
+            var ranked = request.Courses
+                .Select(course =>
+                {
+                    var courseTokens = Tokenize($"{course.Title} {course.Description} {course.InstructorName}");
+                    var overlap = intentTokens.Intersect(courseTokens).Count();
+                    var score = intentTokens.Count == 0 ? 0.45 : Math.Min(1.0, 0.35 + (overlap / (double)intentTokens.Count));
+                    var reason = overlap > 0
+                        ? $"This course aligns with your goals through {string.Join(", ", intentTokens.Intersect(courseTokens).Take(3))}."
+                        : "This course is a strong baseline match for your stated goals and interests.";
+
+                    return new AiCourseRecommendationItemDto
+                    {
+                        CourseId = course.CourseId,
+                        MatchScore = Math.Round(score, 2),
+                        Reason = reason
+                    };
+                })
+                .OrderByDescending(item => item.MatchScore)
+                .ThenBy(item => item.CourseId)
+                .Take(request.MaxRecommendations)
+                .ToList();
+
+            return new AiCourseRecommendationsResponseDto
+            {
+                Summary = summary,
+                Recommendations = ranked,
+                Provider = "backend-fallback",
+                Model = "rules",
+                IsFallback = true,
+                Status = "fallback"
+            };
+        }
+
+        private static HashSet<string> Tokenize(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                return new HashSet<string>();
+            }
+
+            var stopWords = new HashSet<string>
+            {
+                "the", "and", "for", "with", "that", "this", "your", "want", "from", "into", "about", "learn"
+            };
+
+            return input
+                .ToLowerInvariant()
+                .Split(new[] { ' ', ',', '.', ';', ':', '!', '?', '-', '_', '/', '\\', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(token => token.Length > 2 && !stopWords.Contains(token))
+                .ToHashSet();
+        }
     }
 }

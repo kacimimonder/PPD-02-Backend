@@ -14,11 +14,22 @@ namespace API.Controllers
     {
         private readonly AiService _aiService;
         private readonly AiModuleService _aiModuleService;
+        private readonly UserService _userService;
+        private readonly CourseService _courseService;
+        private readonly EnrollmentService _enrollmentService;
 
-        public AIController(AiService aiService, AiModuleService aiModuleService)
+        public AIController(
+            AiService aiService,
+            AiModuleService aiModuleService,
+            UserService userService,
+            CourseService courseService,
+            EnrollmentService enrollmentService)
         {
             _aiService = aiService;
             _aiModuleService = aiModuleService;
+            _userService = userService;
+            _courseService = courseService;
+            _enrollmentService = enrollmentService;
         }
 
         [HttpGet("health")]
@@ -275,6 +286,120 @@ namespace API.Controllers
             {
                 return StatusCode(StatusCodes.Status502BadGateway, CreateErrorResponse("ai_unavailable", ex.Message));
             }
+        }
+
+        [HttpGet("recommendations/profile")]
+        [Authorize(Roles = "Student")]
+        [ProducesResponseType(typeof(AiRecommendationsProfileDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public async Task<IActionResult> GetRecommendationsProfile()
+        {
+            if (!TryGetCurrentUser(out var userId, out _, out var unauthorizedResult))
+            {
+                return unauthorizedResult;
+            }
+
+            var profile = await _userService.GetAiRecommendationsProfileAsync(userId);
+            return Ok(profile);
+        }
+
+        [HttpPost("recommendations")]
+        [Authorize(Roles = "Student")]
+        [ProducesResponseType(typeof(AiCourseRecommendationsResultDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public async Task<IActionResult> RecommendCourses([FromBody] AiRecommendCoursesRequestDto request, CancellationToken cancellationToken)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(CreateValidationError(ModelState));
+            }
+
+            if (!TryGetCurrentUser(out var userId, out _, out var unauthorizedResult))
+            {
+                return unauthorizedResult;
+            }
+
+            var ambitions = request.Ambitions.Trim();
+            var interests = request.Interests.Trim();
+            if (string.IsNullOrWhiteSpace(ambitions) || string.IsNullOrWhiteSpace(interests))
+            {
+                return BadRequest(CreateErrorResponse("validation_error", "Please provide both ambitions and interests."));
+            }
+
+            await _userService.UpsertAiRecommendationsProfileAsync(userId, ambitions, interests);
+
+            var discoverCourses = await _courseService.GetDiscoverCoursesAsync(80);
+            var enrolled = await _enrollmentService.GetEnrolledCoursesByStudentId(userId);
+            var enrolledCourseIds = enrolled.Select(e => e.CourseID).ToHashSet();
+
+            var availableCourses = discoverCourses
+                .Where(c => !enrolledCourseIds.Contains(c.Id))
+                .GroupBy(c => c.Id)
+                .Select(g => g.First())
+                .ToList();
+
+            if (availableCourses.Count == 0)
+            {
+                return Ok(new AiCourseRecommendationsResultDto
+                {
+                    Summary = "You are already enrolled in all currently available suggested courses.",
+                    Courses = new List<AiRecommendedCourseCardDto>(),
+                    Provider = "backend",
+                    Model = "n/a",
+                    IsFallback = false,
+                    Status = "success"
+                });
+            }
+
+            var aiRequest = new AiCourseRecommendationsRequestDto
+            {
+                Ambitions = ambitions,
+                Interests = interests,
+                MaxRecommendations = request.MaxRecommendations,
+                Language = string.IsNullOrWhiteSpace(request.Language) ? "en" : request.Language,
+                Courses = availableCourses.Select(c => new AiCourseCandidateDto
+                {
+                    CourseId = c.Id,
+                    Title = c.Title,
+                    Description = c.Description,
+                    InstructorName = c.Instructor?.FullName ?? string.Empty,
+                    ImageUrl = c.ImageUrl,
+                    Price = c.Price
+                }).ToList()
+            };
+
+            var aiResponse = await _aiService.RecommendCoursesAsync(aiRequest, cancellationToken);
+            var courseById = availableCourses.ToDictionary(c => c.Id, c => c);
+
+            var cards = aiResponse.Recommendations
+                .Where(item => courseById.ContainsKey(item.CourseId))
+                .Select(item =>
+                {
+                    var course = courseById[item.CourseId];
+                    return new AiRecommendedCourseCardDto
+                    {
+                        CourseId = course.Id,
+                        Title = course.Title,
+                        ImageUrl = course.ImageUrl,
+                        Price = course.Price,
+                        InstructorName = course.Instructor?.FullName ?? string.Empty,
+                        InstructorImageUrl = course.Instructor?.PhotoUrl ?? string.Empty,
+                        Reason = item.Reason,
+                        MatchScore = item.MatchScore
+                    };
+                })
+                .ToList();
+
+            return Ok(new AiCourseRecommendationsResultDto
+            {
+                Summary = aiResponse.Summary,
+                Courses = cards,
+                Provider = aiResponse.Provider,
+                Model = aiResponse.Model,
+                IsFallback = aiResponse.IsFallback,
+                Status = aiResponse.Status
+            });
         }
 
         private bool TryGetCurrentUser(out int userId, out string role, out IActionResult unauthorizedResult)

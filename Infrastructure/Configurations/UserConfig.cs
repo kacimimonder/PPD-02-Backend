@@ -57,6 +57,17 @@ namespace Infrastructure.Configurations
                     .HasMaxLength(500)
                     .IsRequired(false);
 
+                builder.Property(u => u.AiAmbitions)
+                    .HasMaxLength(1200)
+                    .IsRequired(false);
+
+                builder.Property(u => u.AiInterests)
+                    .HasMaxLength(1200)
+                    .IsRequired(false);
+
+                builder.Property(u => u.AiProfileUpdatedAtUtc)
+                    .IsRequired(false);
+
                 // Indexes
                 builder.HasIndex(u => u.Email)
                     .IsUnique()
