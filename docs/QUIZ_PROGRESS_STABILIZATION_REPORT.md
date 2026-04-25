@@ -98,17 +98,17 @@ Observed runtime result:
 
 ## Regression Matrix
 
-| Area | Endpoint / UI | Expected Result | Status |
-|---|---|---|---|
-| Migration integrity | EF update + migration history | Quiz persistence migration applies successfully | Pass |
-| Instructor progress read | GET /api/quizprogress/courses/{courseId} | Returns 200 + students payload | Pass |
-| Instructor assign action | POST /api/quizprogress/assignments | Returns 200; idempotent if already assigned | Pass |
-| Student attempt persistence | POST /api/quizprogress/attempts | Saves attempt and increments attempt number | Pass |
-| Progress refresh after attempt | GET /api/quizprogress/courses/{courseId} | Reflects persisted attempts | Pass |
-| Quiz UI context guard | QuizSlideshow save action | Save disabled when context missing | Pass (build + diagnostics) |
-| Instructor assign UX reliability | InstructorCoursesPage | Distinguishes refresh failure vs assign failure | Pass (build + diagnostics) |
-| Emotion request resilience | ChatAIPage emotion mode | Queued/sending/retrying states with timeout/retry | Pass (build + diagnostics) |
-| Student course content UX | CourseContentPage | Loading/error/empty + completion feedback | Pass (build + diagnostics) |
+| Area                             | Endpoint / UI                            | Expected Result                                   | Status                     |
+| -------------------------------- | ---------------------------------------- | ------------------------------------------------- | -------------------------- |
+| Migration integrity              | EF update + migration history            | Quiz persistence migration applies successfully   | Pass                       |
+| Instructor progress read         | GET /api/quizprogress/courses/{courseId} | Returns 200 + students payload                    | Pass                       |
+| Instructor assign action         | POST /api/quizprogress/assignments       | Returns 200; idempotent if already assigned       | Pass                       |
+| Student attempt persistence      | POST /api/quizprogress/attempts          | Saves attempt and increments attempt number       | Pass                       |
+| Progress refresh after attempt   | GET /api/quizprogress/courses/{courseId} | Reflects persisted attempts                       | Pass                       |
+| Quiz UI context guard            | QuizSlideshow save action                | Save disabled when context missing                | Pass (build + diagnostics) |
+| Instructor assign UX reliability | InstructorCoursesPage                    | Distinguishes refresh failure vs assign failure   | Pass (build + diagnostics) |
+| Emotion request resilience       | ChatAIPage emotion mode                  | Queued/sending/retrying states with timeout/retry | Pass (build + diagnostics) |
+| Student course content UX        | CourseContentPage                        | Loading/error/empty + completion feedback         | Pass (build + diagnostics) |
 
 ## Rollback Plan
 
