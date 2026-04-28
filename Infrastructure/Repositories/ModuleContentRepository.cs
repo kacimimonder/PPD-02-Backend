@@ -48,6 +48,13 @@ namespace Infrastructure.Repositories
                 return null;
             }
         }
+
+        public async Task<ModuleContent?> GetByIdWithAttachmentsAsync(int id)
+        {
+            return await _miniCourseraContext.ModuleContents
+                .Include(moduleContent => moduleContent.LectureAttachments)
+                .FirstOrDefaultAsync(moduleContent => moduleContent.Id == id);
+        }
         public async Task DeleteAsync(int id)
         {
             var moduleContent = await _miniCourseraContext.ModuleContents.FindAsync(id);

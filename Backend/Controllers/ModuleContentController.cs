@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace API.Controllers
 {
@@ -47,6 +46,12 @@ namespace API.Controllers
                 }
                 string fileName = moduleContentDTO?.videoFile?.Name;
                 int moduleContentId = await _moduleContentService.AddModuleContentAsync(instructorId, moduleContentDTO.moduleContentCreateDTO,videoStream,fileName);
+                var attachments = await BuildAttachmentUploadsAsync(moduleContentDTO.imageFiles, "Image");
+                attachments.AddRange(await BuildAttachmentUploadsAsync(moduleContentDTO.pdfFiles, "Pdf"));
+                if (attachments.Count > 0)
+                {
+                    await _moduleContentService.AddModuleContentAttachmentsAsync(instructorId, moduleContentId, attachments);
+                }
                 return Ok(moduleContentId);
             }
             catch (BadRequestException ex)
@@ -89,6 +94,14 @@ namespace API.Controllers
                 await _moduleContentService.UpdateModuleContentAsync(instructorId,
                     moduleContentDTOUpdate.ModuleContentUpdateDTO,
                     videoStream,fileName);
+
+                var attachments = await BuildAttachmentUploadsAsync(moduleContentDTOUpdate.imageFiles, "Image");
+                attachments.AddRange(await BuildAttachmentUploadsAsync(moduleContentDTOUpdate.pdfFiles, "Pdf"));
+                await _moduleContentService.SyncModuleContentAttachmentsAsync(
+                    instructorId,
+                    moduleContentDTOUpdate.ModuleContentUpdateDTO.Id,
+                    moduleContentDTOUpdate.DeleteAttachmentIds,
+                    attachments);
 
                 return Ok("Module content updated successfully");
             }
@@ -136,6 +149,32 @@ namespace API.Controllers
             {
                 return StatusCode(StatusCodes.Status500InternalServerError, $"Error deleting module content: {ex.Message}");
             }
+        }
+
+        private static async Task<List<ModuleContentAttachmentUploadDTO>> BuildAttachmentUploadsAsync(
+            List<IFormFile>? files,
+            string attachmentType)
+        {
+            var attachments = new List<ModuleContentAttachmentUploadDTO>();
+            if (files == null || files.Count == 0)
+            {
+                return attachments;
+            }
+
+            foreach (var file in files.Where(file => file != null && file.Length > 0))
+            {
+                await using var memoryStream = new MemoryStream();
+                await file.CopyToAsync(memoryStream);
+                attachments.Add(new ModuleContentAttachmentUploadDTO
+                {
+                    FileName = file.FileName,
+                    ContentType = file.ContentType,
+                    FileBytes = memoryStream.ToArray(),
+                    AttachmentType = attachmentType
+                });
+            }
+
+            return attachments;
         }
 
     }

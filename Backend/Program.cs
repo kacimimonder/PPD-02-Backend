@@ -11,6 +11,7 @@ using Infrastructure.Configurations;
 using Infrastructure.Repositories;
 using Infrastructure.Utilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -65,6 +66,8 @@ namespace Backend
             // ModuleContent
             builder.Services.AddScoped<ModuleContentService>();
             builder.Services.AddScoped<IModuleContentRepository, ModuleContentRepository>();
+            builder.Services.AddScoped<ILectureAttachmentRepository, LectureAttachmentRepository>();
+            builder.Services.AddScoped<ILectureAttachmentStorageService, LectureAttachmentStorageService>();
 
             //RefreshToken
             builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
@@ -225,6 +228,27 @@ namespace Backend
             app.UseHttpsRedirection();
             app.UseAuthentication();
             app.UseAuthorization();
+
+            var legacyUploadsRoot = Path.Combine(AppContext.BaseDirectory, "uploads");
+            if (Directory.Exists(legacyUploadsRoot))
+            {
+                app.UseStaticFiles(new StaticFileOptions
+                {
+                    FileProvider = new PhysicalFileProvider(legacyUploadsRoot),
+                    RequestPath = "/uploads"
+                });
+            }
+
+            var legacyVideosRoot = Path.Combine(AppContext.BaseDirectory, "videos");
+            if (Directory.Exists(legacyVideosRoot))
+            {
+                app.UseStaticFiles(new StaticFileOptions
+                {
+                    FileProvider = new PhysicalFileProvider(legacyVideosRoot),
+                    RequestPath = "/videos"
+                });
+            }
+
             app.UseStaticFiles();
             app.MapControllers();
             app.MapGet("/", () => "Mini Coursera Backend is live!");

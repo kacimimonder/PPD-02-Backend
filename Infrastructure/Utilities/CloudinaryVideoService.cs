@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using CloudinaryDotNet.Actions;
 using CloudinaryDotNet;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Domain.Interfaces.Utilities;
 
 namespace Infrastructure.Utilities
@@ -14,7 +15,9 @@ namespace Infrastructure.Utilities
     {
         private readonly Cloudinary? _cloudinary;
         private readonly bool _useCloudinary;
-        public CloudinaryVideoService(IConfiguration config)
+        private readonly string? _localVideoRoot;
+
+        public CloudinaryVideoService(IConfiguration config, IHostEnvironment environment)
         {
             var cloudName = config["Cloudinary:CloudName"];
             var apiKey = config["Cloudinary:ApiKey"];
@@ -31,6 +34,14 @@ namespace Infrastructure.Utilities
             else
             {
                 _useCloudinary = false;
+                var webRoot = Path.Combine(environment.ContentRootPath, "wwwroot");
+                if (!Directory.Exists(webRoot))
+                {
+                    webRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
+                }
+
+                _localVideoRoot = Path.Combine(webRoot, "videos");
+                Directory.CreateDirectory(_localVideoRoot);
             }
         }
 
@@ -48,7 +59,18 @@ namespace Infrastructure.Utilities
         {
             if (!_useCloudinary)
             {
-                return $"/videos/{Guid.NewGuid()}_{fileName}";
+                var extension = Path.GetExtension(fileName);
+                var safeName = $"{Guid.NewGuid():N}{extension}";
+                var fullPath = Path.Combine(_localVideoRoot!, safeName);
+
+                if (fileStream.CanSeek)
+                {
+                    fileStream.Position = 0;
+                }
+
+                await using var outputStream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                await fileStream.CopyToAsync(outputStream);
+                return $"/videos/{safeName}";
             }
 
             var uniqueFileName = $"{Guid.NewGuid()}_{fileName}";
@@ -74,7 +96,18 @@ namespace Infrastructure.Utilities
             if (url == null || url == "") return false;
             if (!_useCloudinary)
             {
-                return true;
+                try
+                {
+                    var fileName = Path.GetFileName(url.TrimStart('/'));
+                    var fullPath = Path.Combine(_localVideoRoot!, fileName);
+                    if (!File.Exists(fullPath)) return false;
+                    File.Delete(fullPath);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
             }
             string publicId = ExtractPublicIdFromUrl(url);
             var deletionParams = new DeletionParams(publicId)

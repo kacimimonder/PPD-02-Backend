@@ -49,7 +49,9 @@ namespace Application.Mapping
 
 
             //ModuleContent
-            CreateMap<ModuleContent, ModuleContentReadDTO>();
+            CreateMap<LectureAttachment, ModuleContentAttachmentReadDTO>();
+            CreateMap<ModuleContent, ModuleContentReadDTO>()
+                .ForMember(dest => dest.Attachments, opt => opt.MapFrom(src => src.LectureAttachments));
             CreateMap<ModuleContentCreateDTO, ModuleContent>();
             CreateMap<ModuleContentReadDTO, ModuleContent>();
             CreateMap<ModuleContentUpdateDTO, ModuleContent>();

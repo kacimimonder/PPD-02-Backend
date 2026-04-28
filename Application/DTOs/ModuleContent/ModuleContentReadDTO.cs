@@ -12,5 +12,6 @@ namespace Application.DTOs.ModuleContent
         public string Name { get; set; } = default!;
         public string? Content { get; set; }
         public string? VideoUrl { get; set; }
+        public List<ModuleContentAttachmentReadDTO> Attachments { get; set; } = new();
     }
 }

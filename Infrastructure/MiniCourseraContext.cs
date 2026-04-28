@@ -13,6 +13,7 @@ namespace Infrastructure
         public DbSet<Domain.Entities.Enrollment> Enrollments { get; set; }
         public DbSet<Domain.Entities.CourseModule> CourseModules { get; set; }
         public DbSet<Domain.Entities.ModuleContent> ModuleContents { get; set; }
+        public DbSet<Domain.Entities.LectureAttachment> LectureAttachments { get; set; }
         public DbSet<Domain.Entities.EnrollmentProgress> EnrollmentProgresses { get; set; }
         public DbSet<Domain.Entities.RefreshToken> RefreshTokens { get; set; }
         public DbSet<Domain.Entities.AiGeneratedQuiz> AiGeneratedQuizzes { get; set; }
@@ -36,6 +37,7 @@ namespace Infrastructure
             modelBuilder.ApplyConfiguration(new AiGeneratedQuizConfig());
             modelBuilder.ApplyConfiguration(new QuizAssignmentConfig());
             modelBuilder.ApplyConfiguration(new StudentQuizAttemptConfig());
+            modelBuilder.ApplyConfiguration(new LectureAttachmentConfig());
         }
     }
 }

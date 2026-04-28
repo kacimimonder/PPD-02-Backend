@@ -11,6 +11,7 @@ namespace Domain.Interfaces
     {
         Task<bool> IsModuleContentCreatedByInstructor(int instructorId,
             int moduleContentId);
+        Task<ModuleContent?> GetByIdWithAttachmentsAsync(int id);
     }
 
 }

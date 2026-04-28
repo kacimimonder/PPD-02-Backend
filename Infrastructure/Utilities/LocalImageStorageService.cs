@@ -5,6 +5,7 @@ using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
 using Domain.Interfaces.Utilities;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 
 namespace Infrastructure.Utilities
 {
@@ -14,7 +15,7 @@ namespace Infrastructure.Utilities
         private readonly bool _useCloudinary;
         private readonly string? _localUploadRoot;
 
-        public LocalImageStorageService(IConfiguration config)
+        public LocalImageStorageService(IConfiguration config, IHostEnvironment environment)
         {
             var cloudName = config["Cloudinary:CloudName"];
             var apiKey = config["Cloudinary:ApiKey"];
@@ -31,7 +32,13 @@ namespace Infrastructure.Utilities
             else
             {
                 _useCloudinary = false;
-                _localUploadRoot = Path.Combine(AppContext.BaseDirectory, "uploads");
+                var webRoot = Path.Combine(environment.ContentRootPath, "wwwroot");
+                if (!Directory.Exists(webRoot))
+                {
+                    webRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
+                }
+
+                _localUploadRoot = Path.Combine(webRoot, "uploads");
                 Directory.CreateDirectory(_localUploadRoot);
             }
         }

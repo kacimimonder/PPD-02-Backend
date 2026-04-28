@@ -14,5 +14,6 @@ namespace Domain.Entities
         public string? VideoUrl { get; set; }
         public int CourseModuleID { get; set; } = default!;
         public CourseModule? courseModule { get; set; }
+        public ICollection<LectureAttachment> LectureAttachments { get; set; } = new List<LectureAttachment>();
     }
 }
